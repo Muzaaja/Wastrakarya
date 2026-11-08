@@ -14,6 +14,12 @@ export default {
         extend: {
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                heading: ['Crimson Text', 'serif']
+            },
+            colors: {
+                'background': '#12251F',
+                'primary': '#EEC74E',
+                'primary-hover': '#D6B346',
             },
         },
     },

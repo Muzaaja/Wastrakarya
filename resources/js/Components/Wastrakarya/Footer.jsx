@@ -19,7 +19,7 @@ export default function Footer() {
       <div className="flex max-md:flex-col justify-between">
         <div className="flex flex-col gap-7">
           <p className="text-background/90 max-md:hidden mt-14">
-            © 2025 - WASTRAKARYA
+            © 2026 - WASTRAKARYA
           </p>
         </div>
 

@@ -18,7 +18,7 @@ export default function Navbar() {
 
       <div className="flex gap-2">
         <Link
-          href="#"
+          href="/login"
           className="flex items-center gap-2 font-sans bg-transparent text-primary border-2 border-primary hover:bg-primary 
           hover:text-background text-md max-md:text-sm px-6 max-md:px-4 py-2.5 rounded-[12px] font-medium transition-all 
           duration-200"
@@ -28,7 +28,7 @@ export default function Navbar() {
         </Link>
 
         <Link
-          href="#"
+          href="/register"
           className="flex items-center gap-2 font-sans bg-primary text-background hover:bg-transparent border-transparent 
           max-md:hidden border-2 hover:border-primary hover:text-primary text-md px-6 py-2.5 rounded-[12px] font-semibold 
           transition-all duration-200"

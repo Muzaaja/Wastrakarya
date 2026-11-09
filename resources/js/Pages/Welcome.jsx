@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { ArrowRight } from 'lucide-react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
+import Footer from '@/Components/Wastrakarya/Footer';
 
 export default function Welcome() {
    return (
@@ -28,6 +29,12 @@ export default function Welcome() {
                 </Link>
             </div>
         </section>
+
+        <div className='flex flex-col w-full'>
+            <img src="ombak.svg" alt="" />
+            <Footer />
+        </div>
+        
     </div>
    )
 }

@@ -97,7 +97,7 @@ export default function Welcome() {
             <img src="ombak-section-jendela.svg" alt="" />
             <div className='flex max-md:flex-col bg-[#23713D] gap-10 min-h-screen w-full px-[120px] max-md:px-6 items-center'>
                 <div className='flex flex-1 flex-col gap-4 justify-center'>
-                    <h2 className='font-heading font-bold text-8xl max-md:text-6xl max-md:hidden text-primary'>
+                    <h2 className='font-heading font-bold text-8xl max-md:text-6xl text-primary'>
                         Jendela Makna
                     </h2>
                     <p className='text-white/90 text-2xl max-md:text-lg'>

@@ -7,7 +7,7 @@ const socmed = [
 
 export default function Footer() {
   return (
-    <footer className="flex flex-col max-md:gap-10 max-lg:px-10 px-20 max-md:py-12 pb-12 w-full bg-primary-hover">
+    <footer className="flex flex-col max-md:gap-10 max-lg:px-10 px-20 max-md:py-12 pb-12 w-full bg-primary">
       <div className="flex max-md:flex-col items-center gap-3 max-md:gap-1">
         <img 
           src="/logo-wastrakarya-dark.svg"

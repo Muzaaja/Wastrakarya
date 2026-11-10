@@ -2,7 +2,6 @@ import { Link } from '@inertiajs/react';
 import { ArrowRight } from 'lucide-react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
-import { SelectionHelper } from 'three/examples/jsm/Addons.js';
 
 export default function Welcome() {
    return (
@@ -126,7 +125,6 @@ export default function Welcome() {
             <img src="ombak.svg" alt="" />
             <Footer />
         </div>
-        
     </div>
    )
 }

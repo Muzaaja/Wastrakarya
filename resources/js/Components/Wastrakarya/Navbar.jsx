@@ -3,7 +3,7 @@ import { Link } from "@inertiajs/react";
 
 export default function Navbar() {
   return (
-    <nav className="fixed top-0 left-0 w-full px-20 max-md:px-4 py-4 shadow-sm flex justify-between items-center bg-background z-50">
+    <nav className="fixed top-0 left-0 w-full px-20 max-md:px-4 py-4 shadow-sm flex justify-between items-center z-50 bg-gradient-to-b from-background via-background/70 to-transparent">
       {/* Logo */}
       <Link href="/" className='flex gap-3 items-center'>
         <img

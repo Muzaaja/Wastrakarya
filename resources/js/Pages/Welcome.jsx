@@ -2,9 +2,11 @@ import { Link } from '@inertiajs/react';
 import { ArrowRight } from 'lucide-react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
-import { SelectionHelper } from 'three/examples/jsm/Addons.js';
+import JendelaMakna from '@/Components/Wastrakarya/JendelaMakna';
+import { useState } from 'react';
 
 export default function Welcome() {
+   const [isModalOpen, setIsModalOpen] = useState(false);
    return (
     <div className='flex flex-col bg-background w-full items-center overflow-x-hidden'>
         <Navbar />
@@ -69,7 +71,17 @@ export default function Welcome() {
             <img src="ombak-section-mockup.svg" alt="" />
             <div className='flex bg-[#30543C] min-h-screen w-full px-[120px] max-md:px-6 items-center'>
                 <div className='max-md:hidden flex-1 flex justify-start'>
-
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="px-6 py-3 bg-primary text-background font-semibold rounded-xl hover:opacity-90 transition-all"
+                    >
+                        Lihat Jendela Makna (Filosofi Canting)
+                    </button>
+                    
+                    <JendelaMakna 
+                        isOpen={isModalOpen} 
+                        onClose={() => setIsModalOpen(false)} 
+                    />
                 </div>
 
                 <div className='flex flex-1 flex-col gap-4 items-end'>
@@ -126,7 +138,6 @@ export default function Welcome() {
             <img src="ombak.svg" alt="" />
             <Footer />
         </div>
-        
     </div>
    )
 }

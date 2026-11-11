@@ -26,6 +26,10 @@ Route::middleware('auth')->group(function () {
 
 Route::get('/canvas', function () {
     return Inertia::render('WastraCanvas');
-});
+})->name('canvas');
+
+Route::get('/mockup', function () {
+    return Inertia::render('WastraMockup');
+})->name('mockup');
 
 require __DIR__.'/auth.php';

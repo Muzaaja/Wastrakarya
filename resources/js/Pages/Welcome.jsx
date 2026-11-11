@@ -48,7 +48,7 @@ export default function Welcome() {
                     </p>
 
                     <div className='flex mt-6'>
-                        <Link href="/login" 
+                        <Link href="/canvas" 
                             className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                             border-2 border-transparent hover:border-primary px-6 py-3.5 rounded-[12px] font-semibold 
                             transition-all duration-200 hover:text-primary">
@@ -81,7 +81,7 @@ export default function Welcome() {
                     </p>
 
                     <div className='flex mt-6'>
-                        <Link href="/login" 
+                        <Link href="/canvas" 
                             className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                             border-2 border-transparent hover:border-primary px-6 py-3.5 rounded-[12px] font-semibold 
                             transition-all duration-200 hover:text-primary">
@@ -105,7 +105,7 @@ export default function Welcome() {
                     </p>
 
                     <div className='flex mt-6'>
-                        <Link href="/login" 
+                        <Link href="/canvas" 
                             className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                             border-2 border-transparent hover:border-primary px-6 py-3.5 rounded-[12px] font-semibold 
                             transition-all duration-200 hover:text-primary">

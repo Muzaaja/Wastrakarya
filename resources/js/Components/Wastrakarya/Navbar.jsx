@@ -1,5 +1,6 @@
-import { ArrowRight, LogIn } from "lucide-react";
+import { ArrowRight, ChevronDown, LogIn } from "lucide-react";
 import { Link, usePage } from "@inertiajs/react";
+import Dropdown from '@/Components/Dropdown';
 
 export default function Navbar() {
   const { auth } = usePage().props;
@@ -15,11 +16,11 @@ export default function Navbar() {
           className="size-[60px] max-md:size-[50px] object-contain"
         />
         <span className="text-3xl max-md:text-2xl font-heading font-semibold text-primary-hover">
-            Wastrakarya
+          Wastrakarya
         </span>
       </Link>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
         {!isLoggedIn ? (
           <>
             <Link
@@ -43,11 +44,36 @@ export default function Navbar() {
             </Link>
           </>
         ) : (
-          <span className="text-primary font-normal max-md:text-lg text-xl">
-            {auth.user.name}
-          </span>
+          <div className="relative">
+            <Dropdown>
+              <Dropdown.Trigger>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-[12px] px-3 py-2 text-primary hover:text-primary-hover font-medium max-md:text-lg text-xl transition-colors duration-200 focus:outline-none"
+                >
+                  <span>{auth.user.name}</span>
+                  <ChevronDown size={20} />
+                </button>
+              </Dropdown.Trigger>
+
+              <Dropdown.Content
+                contentClasses="py-1 bg-primary">
+                <Dropdown.Link href={route('profile.edit')}
+                  className="hover:bg-transparent hover:font-semibold">
+                  Profile
+                </Dropdown.Link>
+                <Dropdown.Link
+                  href={route('logout')}
+                  method="post"
+                  as="button"
+                  className="hover:bg-transparent hover:font-semibold"
+                >
+                  Log Out
+                </Dropdown.Link>
+              </Dropdown.Content>
+            </Dropdown>
+          </div>
         )}
-        
       </div>
     </nav>
   );

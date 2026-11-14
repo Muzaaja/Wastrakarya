@@ -8,7 +8,7 @@ export const BATIK_MOTIFS = [
     {
         id: 'polos',
         name: 'Tanpa Pola',
-        origin: 'Kreasi Bebas',
+        origin: '',
         category: 'Polos / Bebas',
         description: 'Kanvas polos tanpa garis titik-titik panduan. Bebaskan kreativitas dan imajinasi Anda untuk melukis motif batik orisinal secara mandiri dengan pengulangan tanpa batas.',
         svgIcon: (

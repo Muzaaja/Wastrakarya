@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { 
     ArrowLeft, 
     RotateCcw, 
@@ -15,6 +15,16 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { createDefaultKawungPicisTexture, createCustomBatikTexture } from '@/Components/WastraMockup/Shirt3DGenerator';
+
+const MOTIF_NAMES = {
+    kawung: 'Kawung',
+    parang: 'Parang',
+    ceplok: 'Ceplok',
+    truntum: 'Truntum',
+    sidomukti: 'Sidomukti',
+    nitik: 'Nitik',
+    polos: 'Polos',
+};
 
 export default function WastraMockup() {
     const mountRef = useRef(null);
@@ -33,42 +43,88 @@ export default function WastraMockup() {
     const [toastMessage, setToastMessage] = useState(null);
 
     // State Info Karya
-    const [projectTitle, setProjectTitle] = useState('Kawung Picis');
+    const [projectTitle, setProjectTitle] = useState(null);
     const [savedDataUrl, setSavedDataUrl] = useState(null);
+    const savedDataUrlRef = useRef(null);
+    const [savedDrawing, setSavedDrawing] = useState(null);
+    const [savedLoading, setSavedLoading] = useState(false);
 
     const showToast = (msg) => {
         setToastMessage(msg);
         setTimeout(() => setToastMessage(null), 3000);
     };
 
-    // Muat data karya terakhir dari Studio (LocalStorage)
+    // Auth user (shared secara global oleh middleware Inertia)
+    const { auth } = usePage().props;
+    const user = auth?.user ?? null;
+
+    // CSRF token helper untuk panggilan API Laravel dari halaman Inertia
+    const getCsrfToken = useCallback(() => {
+        const match = document.cookie.match(/(?:^|; )\s*XSRF-TOKEN=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : null;
+    }, []);
+
+    // Ambil simpanan terbaru dari database (berdasarkan User yang login)
+    const fetchLatestDrawing = useCallback(async () => {
+        if (!user) return;
+        setSavedLoading(true);
+        try {
+            const res = await fetch('/api/user-drawings', {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(getCsrfToken() ? { 'X-XSRF-TOKEN': getCsrfToken() } : {}),
+                },
+            });
+            if (!res.ok) throw new Error('Gagal memuat simpanan karya');
+            const data = await res.json();
+            const drawings = Array.isArray(data) ? data : [];
+            setSavedDrawing(drawings[0] ?? null);
+        } catch (err) {
+            console.error(err);
+            setSavedDrawing(null);
+        } finally {
+            setSavedLoading(false);
+        }
+    }, [user, getCsrfToken]);
+
+    // Muat simpanan terbaru saat user login, atau dari LocalStorage untuk tamu
     useEffect(() => {
+        if (user) {
+            fetchLatestDrawing();
+        } else {
+            setSavedDrawing(null);
+        }
+    }, [user, fetchLatestDrawing]);
+
+    // Terapkan simpanan ke tekstur kemeja dan nama karya
+    useEffect(() => {
+        let drawing = null;
+        // LocalStorage sebagai fallback langsung (termasuk user login agar tidak blink kosong)
         try {
             const saved = localStorage.getItem('wastrakarya_studio_save');
-            if (saved) {
-                const data = JSON.parse(saved);
-                if (data.title && data.title !== 'Karya tanpa judul') {
-                    setProjectTitle(data.title);
-                } else if (data.motif && data.motif !== 'polos') {
-                    // Beri nama sesuai motif batik pakem
-                    const motifNames = {
-                        kawung: 'Kawung Picis',
-                        parang: 'Parang Rusak',
-                        ceplok: 'Ceplok Kusumo',
-                        truntum: 'Truntum Kencana',
-                        sidomukti: 'Sidomukti Keraton',
-                        nitik: 'Nitik Karawitan'
-                    };
-                    setProjectTitle(motifNames[data.motif] || data.motif);
-                }
-                if (data.dataUrl) {
-                    setSavedDataUrl(data.dataUrl);
-                }
-            }
+            if (saved) drawing = JSON.parse(saved);
         } catch (err) {
             console.error('Error reading saved studio data', err);
         }
-    }, []);
+
+        // Jika user login dan ada data dari DB, gunakan data DB (lebih baru)
+        if (user && savedDrawing) {
+            drawing = savedDrawing;
+        }
+
+        if (drawing && drawing.data_url) {
+            setSavedDataUrl(drawing.data_url);
+            savedDataUrlRef.current = drawing.data_url;
+            setProjectTitle(
+                drawing.title || MOTIF_NAMES[drawing.motif] || drawing.motif || null
+            );
+        } else {
+            setSavedDataUrl(null);
+            savedDataUrlRef.current = null;
+            setProjectTitle(null);
+        }
+    }, [user, savedDrawing]);
 
     // Inisialisasi Three.js Scene, Camera, Lights, dan 3D Shirt Model
     useEffect(() => {
@@ -210,9 +266,9 @@ export default function WastraMockup() {
 
                 scene.add(shirtObject);
 
-                // Jika ada desain pengguna dari LocalStorage, timpa tekstur
-                if (savedDataUrl) {
-                    createCustomBatikTexture(savedDataUrl, (customTex) => {
+                // Jika ada desain pengguna, timpa tekstur
+                if (savedDataUrlRef.current) {
+                    createCustomBatikTexture(savedDataUrlRef.current, (customTex) => {
                         customTex.wrapS = THREE.RepeatWrapping;
                         customTex.wrapT = THREE.RepeatWrapping;
                         const baseRep = 2 * motifScale;
@@ -377,12 +433,10 @@ export default function WastraMockup() {
             <header className="h-16 px-8 bg-[#091611]/80 backdrop-blur-md border-b border-[#182C24] flex items-center justify-between shrink-0 z-30">
                 {/* Logo & Judul Studio */}
                 <div className="flex items-center gap-3">
-                    <Link href="/" className="flex items-baseline gap-2.5 group">
+                    <Link href="/" className="flex items-center gap-2.5 group">
+                        <img width={40} src="logo-wastrakarya.svg" />
                         <span className="font-heading text-2xl font-bold tracking-wide text-[#E2CEAB] group-hover:text-[#F3E5C8] transition-colors">
                             Wastrakarya
-                        </span>
-                        <span className="text-[10px] tracking-widest text-[#7E9385] font-semibold uppercase">
-                            SIMULASI 3D
                         </span>
                     </Link>
                 </div>
@@ -402,14 +456,16 @@ export default function WastraMockup() {
             {/* MAIN WORKSPACE LAYOUT */}
             <div className="flex flex-1 overflow-hidden relative">
                 {/* 1. INFORMASI JUDUL KARYA (KIRI ATAS) */}
-                <div className="absolute top-8 left-8 z-20 pointer-events-none">
-                    <h1 className="font-heading text-4xl font-bold text-[#E2CEAB] tracking-wide">
-                        {projectTitle}
-                    </h1>
-                    <p className="text-sm text-[#7E9385] mt-1 font-medium">
-                        Kemeja lengan panjang
-                    </p>
-                </div>
+                {projectTitle && (
+                    <div className="absolute top-8 left-8 z-20 pointer-events-none">
+                        <h1 className="font-heading text-4xl font-bold text-[#E2CEAB] tracking-wide">
+                            {projectTitle}
+                        </h1>
+                        <p className="text-sm text-[#7E9385] mt-1 font-medium">
+                            Kemeja lengan panjang
+                        </p>
+                    </div>
+                )}
 
                 {/* 2. AREA VIEWPORT THREE.JS 3D MOCKUP (TENGAH) */}
                 <div className="flex-1 h-full w-full relative flex items-center justify-center overflow-hidden">
@@ -473,16 +529,6 @@ export default function WastraMockup() {
                             Geser untuk memutar · Scroll untuk memperbesar
                         </p>
                     </div>
-
-                    {/* PRATINJAU BUSANA (KIRI BAWAH) */}
-                    <div className="absolute bottom-8 left-8 z-20 pointer-events-none">
-                        <p className="text-[10px] tracking-widest text-[#7E9385] uppercase font-semibold">
-                            PRATINJAU BUSANA
-                        </p>
-                        <p className="text-xs text-[#E2CEAB] font-medium mt-0.5 capitalize">
-                            {fabricType} · Motif {Math.round(motifScale * 100)}%
-                        </p>
-                    </div>
                 </div>
 
                 {/* 3. PANEL SEBELAH KANAN (PARAMETER 3D) */}
@@ -493,9 +539,6 @@ export default function WastraMockup() {
                             <h2 className="font-heading text-2xl font-semibold text-[#E2CEAB]">
                                 Parameter 3D
                             </h2>
-                            <p className="text-xs text-[#7E9385] mt-1 mb-6">
-                                Sesuaikan tampilan karyamu.
-                            </p>
 
                             {/* Kontrol 1: Motif Scale */}
                             <div className="mb-6">
@@ -588,14 +631,6 @@ export default function WastraMockup() {
 
                         {/* Tombol Unduh Mockup */}
                         <div className="pt-4 border-t border-[#182C24]">
-                            <div className="flex items-center gap-2 text-xs text-[#7E9385] mb-3">
-                                <FileText size={14} className="text-[#CDB988]" />
-                                <div>
-                                    <p className="font-medium text-[#BACDC2]">Mockup siap diunduh</p>
-                                    <p className="text-[10px]">PNG resolusi tinggi</p>
-                                </div>
-                            </div>
-
                             <button
                                 onClick={handleDownloadMockup}
                                 className="w-full bg-[#D5BD8A] hover:bg-[#C4AC79] active:scale-95 text-[#0A1612] font-semibold text-sm py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-2"

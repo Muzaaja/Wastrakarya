@@ -1,11 +1,11 @@
-import { Link, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { ArrowRight, Plus } from 'lucide-react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
 import DesignCard from '@/Components/Wastrakarya/DesignCard';
 import Shirt3DViewer from '@/Components/WastraMockup/Shirt3DViewer';
 
-export default function Welcome() {
+export default function Welcome({ drawings = [] }) {
    const { auth } = usePage().props;
    const isLoggedIn = !!auth.user;
 
@@ -160,26 +160,33 @@ export default function Welcome() {
                             </h1>
                             <p className='text-white/80 text-[24px] max-md:text-[18px]'>Mau desain apa hari ini?</p>
                         </div>
-                    </div>
-                    <div className='flex max-md:flex-col justify-between items-center text-center max-md:gap-10 gap-9 w-full'>
-                        <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
-                        <Link href="/wastracanvas" 
+                        <div className='w-fit'>
+                            <Link href="/canvas" 
                             className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                             border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
                             transition-all duration-200 hover:text-primary">
                             <Plus />
                             Buat Desain Baru
                         </Link>
+                        </div>
                     </div>
-                    
-                    <div className='grid gap-6 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
-                        <DesignCard />
-                        <DesignCard />
-                        <DesignCard />
-                        <DesignCard />
-                        <DesignCard />
-                        <DesignCard />
-                    </div>
+                    <div className='h-px w-full bg-white/20'></div>
+                    <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
+                    {drawings.length > 0 ? (
+                        <div className='grid gap-4 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
+                            {drawings.map((drawing) => (
+                                <DesignCard
+                                    key={drawing.id}
+                                    title={drawing.title || drawing.motif || 'Desain Wastrakarya'}
+                                    lastEdited={drawing.updated_at ? `Diedit ${new Date(drawing.updated_at).toLocaleString('id-ID')}` : undefined}
+                                    thumbnailUrl={drawing.data_url || null}
+                                    onClick={() => router.visit(`/canvas?drawing=${drawing.id}`)}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <p className='text-white/70 text-lg'>Belum ada desain tersimpan.</p>
+                    )}
                 </section>
             </>
         )}

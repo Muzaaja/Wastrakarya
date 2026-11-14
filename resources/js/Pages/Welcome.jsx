@@ -27,7 +27,10 @@ export default function Welcome() {
         <Navbar />
         {!isLoggedIn ? (
             <>
-                <section className='flex flex-col gap-10 min-h-screen items-center justify-center max-w-[1000px] max-lg:px-8'>
+                <section className='flex flex-col gap-10 min-h-screen items-center justify-center max-w-[1000px] max-lg:px-8 relative'>
+                    <img src="megamendung.svg" alt="" className='size-[1000px] absolute -top-[200px] -left-[900px] z-0'/>
+                    <img src="megamendung.svg" alt="" className='size-[1000px] absolute -bottom-[200px] -right-[850px] z-0'/>
+
                     <h1 className='text-primary text-8xl max-lg:text-6xl max-md:text-[56px] leading-[100px] font-heading font-bold justify-center text-center'>
                         Platform Pembelajaran Batik Digital Interaktif
                     </h1>
@@ -159,26 +162,26 @@ export default function Welcome() {
         ) : (
             <>
                 <section className='flex flex-col gap-10 min-h-screen py-[140px] max-md:py-[100px] justify-start px-[85px] max-md:px-6 w-full'>
-                    <div className='flex max-md:flex-col justify-between max-md:gap-10 gap-9 w-full'>
+                    <div className='flex max-md:flex-col justify-center text-center max-md:gap-10 gap-9 w-full'>
                         <div className='flex flex-col gap-4'>
                             <h1 className='text-primary text-7xl max-md:text-[50px] max-md:leading-[60px] leading-[70px] font-heading text-start font-semibold'>
                                 {getGreeting()}, {auth.user.name}!
                             </h1>
                             <p className='text-white/80 text-[24px] max-md:text-[18px]'>Mau desain apa hari ini?</p>
                         </div>
-                        <div className='w-fit'>
-                            <Link href="/wastracanvas" 
+                    </div>
+                    <div className='flex max-md:flex-col justify-between items-center text-center max-md:gap-10 gap-9 w-full'>
+                        <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
+                        <Link href="/wastracanvas" 
                             className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                             border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
                             transition-all duration-200 hover:text-primary">
                             <Plus />
                             Buat Desain Baru
                         </Link>
-                        </div>
                     </div>
-                    <div className='h-px w-full bg-white/20'></div>
-                    <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
-                    <div className='grid gap-4 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
+                    
+                    <div className='grid gap-6 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
                         <DesignCard />
                         <DesignCard />
                         <DesignCard />

@@ -3,6 +3,7 @@ import { ArrowRight, Plus } from 'lucide-react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
 import DesignCard from '@/Components/Wastrakarya/DesignCard';
+import Shirt3DViewer from '@/Components/WastraMockup/Shirt3DViewer';
 
 export default function Welcome() {
    const { auth } = usePage().props;
@@ -89,31 +90,21 @@ export default function Welcome() {
 
                 <section className='w-full flex flex-col bg-[#313B34]'>
                     <img src="ombak-section-mockup.svg" alt="" />
-                    <div className='flex bg-[#30543C] min-h-[80vh] w-full px-[120px] max-md:px-6 items-center'>
-                        <div className='max-md:hidden flex-1 flex justify-start'>
-                            {/* <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="px-6 py-3 bg-primary text-background font-semibold rounded-xl hover:opacity-90 transition-all"
-                            >
-                                Lihat Jendela Makna (Filosofi Canting)
-                            </button>
-                            
-                            <JendelaMakna 
-                                isOpen={isModalOpen} 
-                                onClose={() => setIsModalOpen(false)} 
-                            /> */}
+                    <div className='flex max-md:flex-col bg-[#30543C] min-h-[80vh] w-full px-[100px] justify-between max-md:px-6 items-center gap-10 py-12'>
+                        <div className='flex-1 max-md:hidden w-full h-[520px] flex items-center justify-center'>
+                            <Shirt3DViewer />
                         </div>
 
-                        <div className='flex flex-1 flex-col gap-4 items-end'>
-                            <h2 className='font-heading font-bold text-8xl max-md:text-6xl text-end text-primary'>
+                        <div className='flex flex-1 flex-col gap-4 pr-[100px] max-md:pr-0 items-end max-md:items-center max-md:justify-center'>
+                            <h2 className='font-heading font-bold text-8xl max-md:text-6xl text-end max-md:text-center text-primary'>
                                 Simulasi Mahakarya <br /> <i>(3D Mockup)</i>
                             </h2>
-                            <p className='text-white/90 text-2xl max-md:text-lg text-end max-w-[500px] mt-2'>
+                            <p className='text-white/90 text-2xl max-md:text-lg text-end max-md:text-center max-w-[500px] mt-2'>
                                 Proyeksikan hasil karya batik Anda menjadi visualisasi mockup tekstil 3D secara interaktif.
                             </p>
 
                             <div className='flex mt-6'>
-                                <Link href="/canvas" 
+                                <Link href="/mockup" 
                                     className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                                     border-2 border-transparent hover:border-primary px-6 py-3.5 rounded-[12px] font-semibold 
                                     transition-all duration-200 hover:text-primary">

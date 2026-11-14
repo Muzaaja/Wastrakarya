@@ -3,6 +3,7 @@ import { ArrowRight, Plus } from 'lucide-react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
 import DesignCard from '@/Components/Wastrakarya/DesignCard';
+import Shirt3DViewer from '@/Components/WastraMockup/Shirt3DViewer';
 
 export default function Welcome() {
    const { auth } = usePage().props;
@@ -27,7 +28,10 @@ export default function Welcome() {
         <Navbar />
         {!isLoggedIn ? (
             <>
-                <section className='flex flex-col gap-10 min-h-screen items-center justify-center max-w-[1000px] max-lg:px-8'>
+                <section className='flex flex-col gap-10 min-h-screen items-center justify-center max-w-[1000px] max-lg:px-8 relative'>
+                    <img src="megamendung.svg" alt="" className='size-[1000px] absolute -top-[200px] -left-[900px] z-0'/>
+                    <img src="megamendung.svg" alt="" className='size-[1000px] absolute -bottom-[200px] -right-[850px] z-0'/>
+
                     <h1 className='text-primary text-8xl max-lg:text-6xl max-md:text-[56px] leading-[100px] font-heading font-bold justify-center text-center'>
                         Platform Pembelajaran Batik Digital Interaktif
                     </h1>
@@ -86,31 +90,21 @@ export default function Welcome() {
 
                 <section className='w-full flex flex-col bg-[#313B34]'>
                     <img src="ombak-section-mockup.svg" alt="" />
-                    <div className='flex bg-[#30543C] min-h-[80vh] w-full px-[120px] max-md:px-6 items-center'>
-                        <div className='max-md:hidden flex-1 flex justify-start'>
-                            {/* <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="px-6 py-3 bg-primary text-background font-semibold rounded-xl hover:opacity-90 transition-all"
-                            >
-                                Lihat Jendela Makna (Filosofi Canting)
-                            </button>
-                            
-                            <JendelaMakna 
-                                isOpen={isModalOpen} 
-                                onClose={() => setIsModalOpen(false)} 
-                            /> */}
+                    <div className='flex max-md:flex-col bg-[#30543C] min-h-[80vh] w-full px-[100px] justify-between max-md:px-6 items-center gap-10 py-12'>
+                        <div className='flex-1 max-md:hidden w-full h-[520px] flex items-center justify-center'>
+                            <Shirt3DViewer />
                         </div>
 
-                        <div className='flex flex-1 flex-col gap-4 items-end'>
-                            <h2 className='font-heading font-bold text-8xl max-md:text-6xl text-end text-primary'>
+                        <div className='flex flex-1 flex-col gap-4 pr-[100px] max-md:pr-0 items-end max-md:items-center max-md:justify-center'>
+                            <h2 className='font-heading font-bold text-8xl max-md:text-6xl text-end max-md:text-center text-primary'>
                                 Simulasi Mahakarya <br /> <i>(3D Mockup)</i>
                             </h2>
-                            <p className='text-white/90 text-2xl max-md:text-lg text-end max-w-[500px] mt-2'>
+                            <p className='text-white/90 text-2xl max-md:text-lg text-end max-md:text-center max-w-[500px] mt-2'>
                                 Proyeksikan hasil karya batik Anda menjadi visualisasi mockup tekstil 3D secara interaktif.
                             </p>
 
                             <div className='flex mt-6'>
-                                <Link href="/canvas" 
+                                <Link href="/mockup" 
                                     className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                                     border-2 border-transparent hover:border-primary px-6 py-3.5 rounded-[12px] font-semibold 
                                     transition-all duration-200 hover:text-primary">
@@ -159,26 +153,26 @@ export default function Welcome() {
         ) : (
             <>
                 <section className='flex flex-col gap-10 min-h-screen py-[140px] max-md:py-[100px] justify-start px-[85px] max-md:px-6 w-full'>
-                    <div className='flex max-md:flex-col justify-between max-md:gap-10 gap-9 w-full'>
+                    <div className='flex max-md:flex-col justify-center text-center max-md:gap-10 gap-9 w-full'>
                         <div className='flex flex-col gap-4'>
                             <h1 className='text-primary text-7xl max-md:text-[50px] max-md:leading-[60px] leading-[70px] font-heading text-start font-semibold'>
                                 {getGreeting()}, {auth.user.name}!
                             </h1>
                             <p className='text-white/80 text-[24px] max-md:text-[18px]'>Mau desain apa hari ini?</p>
                         </div>
-                        <div className='w-fit'>
-                            <Link href="/wastracanvas" 
+                    </div>
+                    <div className='flex max-md:flex-col justify-between items-center text-center max-md:gap-10 gap-9 w-full'>
+                        <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
+                        <Link href="/wastracanvas" 
                             className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                             border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
                             transition-all duration-200 hover:text-primary">
                             <Plus />
                             Buat Desain Baru
                         </Link>
-                        </div>
                     </div>
-                    <div className='h-px w-full bg-white/20'></div>
-                    <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
-                    <div className='grid gap-4 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
+                    
+                    <div className='grid gap-6 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
                         <DesignCard />
                         <DesignCard />
                         <DesignCard />

@@ -115,6 +115,8 @@ export default function WastraCanvas() {
         'Pilih warna malam, lalu tekan "Panaskan Malam" untuk memulai.',
     );
     const [toastMessage, setToastMessage] = useState(null);
+    const [showTutorial, setShowTutorial] = useState(false);
+    const [tutorialStep, setTutorialStep] = useState(0);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [detailMotifModal, setDetailMotifModal] = useState(null);
     const [projectTitle, setProjectTitle] = useState("Karya tanpa judul");
@@ -574,6 +576,13 @@ export default function WastraCanvas() {
             setHasRequestedMalamHeat(true);
         }
     };
+
+    // Trigger tutorial on page load
+    useEffect(() => {
+        if (user) return;
+        const t = setTimeout(() => setShowTutorial(true), 600);
+        return () => clearTimeout(t);
+    }, [user]);
 
     // Cleanup timers on unmount
     useEffect(() => {
@@ -1216,6 +1225,52 @@ export default function WastraCanvas() {
 
     const malamInfo = getMalamStateInfo();
 
+    // Auto-advance tutorial on completed actions
+    useEffect(() => {
+        if (!showTutorial) return;
+        if (tutorialStep === 0 && activeTool === "pencil") {
+            setTutorialStep(1);
+        } else if (tutorialStep === 1 && selectedMotif !== tutorialInitRef.current.motif) {
+            setTutorialStep(2);
+        } else if (tutorialStep === 3 && activeTool === "canting") {
+            setTutorialStep(4);
+        } else if (tutorialStep === 4 && waxColor !== tutorialInitRef.current.color) {
+            setTutorialStep(5);
+        } else if (tutorialStep === 5 && malamState === "ready") {
+            setTutorialStep(6);
+        }
+    }, [showTutorial, tutorialStep, activeTool, malamState, selectedMotif, waxColor]);
+
+    const tutorialInitRef = useRef({ motif: null, color: null });
+    useEffect(() => {
+        if (!showTutorial) return;
+        tutorialInitRef.current = { motif: selectedMotif, color: waxColor };
+    }, [showTutorial]);
+
+    const TUTORIAL_STEPS = [
+        { title: "1. Gunakan Pensil", desc: "Pensil dipakai untuk menggambar garis panduan pada kanvas, yang mana digunakan sebagai acuan untuk nantinya dilukis dengan canting.", target: "tour-pencil" },
+        { title: "2. Pilih Panduan Motif", desc: "Pilih salah satu motif dari Pakem Motif Batik di panel kanan. Panduan titik-titik akan muncul di kanvas sebagai acuan pola.", target: "tour-motif" },
+        { title: "3. Gambar di Kanvas", desc: "Ikuti panduan motif dengan pensil pada kanvas. Tekan \"Selanjutnya\" setelah selesai memberi panduan.", target: "tour-canvas" },
+        { title: "4. Gunakan Canting", desc: "Canting dipakai untuk mengaplikasikan lilin malam cair di atas goresan pensil.", target: "tour-canting" },
+        { title: "5. Pilih Warna Malam", desc: "Pilih warna malam yang diinginkan sebelum dipanaskan, karena warna akan terkunci saat malam dipanaskan.", target: "tour-color" },
+        { title: "6. Panaskan Malam", desc: "Panaskan malam selama 5 detik hingga meleleh sempurna agar dapat digunakan pada canting.", target: "tour-heat" },
+        { title: "7. Lukis di Kanvas", desc: "Setelah malam siap, lukis pada kanvas mengikuti goresan pensil. Malam akan mengeras seiring waktu.", target: "tour-canvas" },
+    ];
+
+    const [spotRect, setSpotRect] = useState(null);
+    useEffect(() => {
+        if (!showTutorial) return;
+        const update = () => {
+            let targetId = TUTORIAL_STEPS[tutorialStep]?.target;
+        if (tutorialStep === 5 && malamState === "heating") targetId = "tour-malam-card";
+        const el = document.getElementById(targetId);
+            if (el) setSpotRect(el.getBoundingClientRect());
+        };
+        update();
+        window.addEventListener("resize", update);
+        return () => window.removeEventListener("resize", update);
+    }, [showTutorial, tutorialStep, malamState]);
+
     return (
         <div className="flex flex-col h-screen w-screen bg-[#07130E] text-[#D8C7A5] select-none font-sans overflow-hidden">
             <Head title="Wastrakarya Studio - Ruang Kreasi Melukis Batik" />
@@ -1423,6 +1478,24 @@ export default function WastraCanvas() {
                             : "Perubahan tersimpan"}
                     </span>
                     <button
+                        onClick={() => {
+                            setMalamState("cold");
+                            setHeatingProgress(0);
+                            setDrawingTimeLeft(60);
+                            tutorialInitRef.current = {
+                                motif: selectedMotif,
+                                color: waxColor,
+                            };
+                            setTutorialStep(0);
+                            setShowTutorial(true);
+                        }}
+                        title="Tutorial Membatik"
+                        className="bg-[#142920] hover:bg-[#1E3B2E] border border-[#CDB988]/50 hover:border-[#CDB988] text-[#E2CEAB] font-semibold text-xs px-3 py-2.5 rounded-xl shadow-sm transition-all duration-150 flex items-center gap-2"
+                    >
+                        <HelpCircle size={15} className="text-[#CDB988]" />
+                        <span>Bantuan</span>
+                    </button>
+                    <button
                         onClick={() => handleSave()}
                         className="bg-[#D5BD8A] hover:bg-[#C4AC79] active:scale-95 text-[#0A1612] font-semibold text-sm px-5 py-2 rounded-xl shadow-md transition-all duration-150 flex items-center gap-2"
                     >
@@ -1457,6 +1530,7 @@ export default function WastraCanvas() {
 
                             {/* Status Indicator */}
                             <div
+                                id="tour-malam-card"
                                 className={`${malamInfo.bgColor} ${malamInfo.borderColor} rounded-xl p-4 mb-3 transition-all duration-300`}
                             >
                                 <div className="flex items-center gap-3 mb-2">
@@ -1607,6 +1681,7 @@ export default function WastraCanvas() {
                                 malamInfo.actionLabel != "Sisa" && (
                                     <button
                                         onClick={handleCantingDip}
+                                        id="tour-heat"
                                         disabled={
                                             malamState === "heating" ||
                                             malamState === "drawing"
@@ -1643,9 +1718,9 @@ export default function WastraCanvas() {
                         </div>
 
                         {/* Bagian: Warna Malam - Only show when allowed */}
-                        {malamInfo.showColorPicker && (
-                            <div>
-                                <h4 className="text-sm font-medium text-[#E2CEAB] mb-3">
+                            {malamInfo.showColorPicker && (
+                                <div id="tour-color">
+                                    <h4 className="text-sm font-medium text-[#E2CEAB] mb-3">
                                     Pilih Warna Malam
                                 </h4>
                                 <div className="flex items-center gap-3 mb-3 flex-wrap">
@@ -1838,6 +1913,13 @@ export default function WastraCanvas() {
                                     return (
                                         <button
                                             key={tool.id}
+                                            id={
+                                                tool.id === "canting"
+                                                    ? "tour-canting"
+                                                    : tool.id === "pencil"
+                                                      ? "tour-pencil"
+                                                      : undefined
+                                            }
                                             onClick={() => selectTool(tool.id)}
                                             title={tool.label}
                                             className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all [clip-path:inset(0)] ${
@@ -1864,6 +1946,7 @@ export default function WastraCanvas() {
 
                 {/* 2. PANEL TENGAH (KANVAS LUKIS BATIK) */}
                 <main
+                    id="tour-canvas"
                     className="flex-1 flex flex-col bg-[#08140F] border border-[#182C24] rounded-2xl p-3 shadow-xl overflow-hidden relative"
                     ref={containerRef}
                     onPointerDown={handleContainerPointerDown}
@@ -2089,7 +2172,7 @@ export default function WastraCanvas() {
                 </main>
 
                 {/* 3. PANEL SEBELAH KANAN (PRESET MOTIF BATIK & PANDUAN) */}
-                <aside className="w-72 bg-[#0A1712] border border-[#182C24] rounded-2xl p-4 flex flex-col shrink-0 shadow-lg">
+                <aside id="tour-motif" className="w-72 bg-[#0A1712] border border-[#182C24] rounded-2xl p-4 flex flex-col shrink-0 shadow-lg">
                     <div className="flex flex-col gap-4 flex-1 overflow-hidden">
                         <div className="flex items-center justify-between mb-2 shrink-0">
                             <h3 className="font-heading font-semibold text-lg text-[#E2CEAB]">
@@ -2325,23 +2408,87 @@ export default function WastraCanvas() {
                             )}
                         </div>
 
-                        <div className="bg-[#0E1E18] border border-[#182C24] rounded-xl p-3 shrink-0 text-[11px] text-[#7E9385] leading-relaxed">
-                            <p className="font-medium text-[#E2CEAB] mb-1">
-                                Tutorial Membatik
-                            </p>
-                            <ol className="list-decimal list-inside space-y-1 text-[#9CB0A4]">
-                                <li>Gambar motif dengan pensil</li>
-                                <li>Pilih warna malam</li>
-                                <li>Panaskan malam selama 5 detik</li>
-                                <li>Lukis malam di kanvas</li>
-                                <li>
-                                    Panaskan ulang malam apabila mengeras
-                                </li>
-                            </ol>
-                        </div>
+                        {!user ? (
+                            <div className="bg-[#0E1E18] border border-[#182C24] rounded-xl p-3 shrink-0 text-[11px] text-[#7E9385] leading-relaxed">
+                                <p className="font-medium text-[#E2CEAB] mb-1">
+                                    Masuk untuk Fitur Lengkap
+                                </p>
+                                <p className="text-[#9CB0A4]">
+                                    Daftar/masuk untuk menyimpan banyak karya,
+                                    mengakses tab Simpanan, dan fitur penuh
+                                    WastraCanvas. Tanpa masuk, karya hanya
+                                    tersimpan lokal dan tidak dapat memiliki
+                                    banyak simpanan.
+                                </p>
+                            </div>
+                        ) : null}
                     </div>
                 </aside>
             </div>
+            {/* TUTORIAL SPOTLIGHT */}
+            {showTutorial && (
+                <div className="fixed inset-0 z-[100] pointer-events-none">
+                    {spotRect && (
+                        <>
+                            {/* Blocker bars around spotlight */}
+                            <div className="fixed top-0 left-0 right-0 pointer-events-auto bg-black/78" style={{ height: Math.max(0, spotRect.top - 8) }} />
+                            <div className="fixed bottom-0 left-0 right-0 pointer-events-auto bg-black/78" style={{ height: Math.max(0, window.innerHeight - (spotRect.bottom + 8)) }} />
+                            <div className="fixed pointer-events-auto bg-black/78" style={{ top: Math.max(0, spotRect.top - 8), left: 0, width: Math.max(0, spotRect.left - 8), height: spotRect.height + 16 }} />
+                            <div className="fixed pointer-events-auto bg-black/78" style={{ top: Math.max(0, spotRect.top - 8), left: spotRect.right + 8, width: Math.max(0, window.innerWidth - (spotRect.right + 8)), height: spotRect.height + 16 }} />
+                            <div
+                                className="absolute rounded-xl ring-2 ring-[#CDB988] pointer-events-none"
+                                style={{
+                                    top: spotRect.top - 8,
+                                    left: spotRect.left - 8,
+                                    width: spotRect.width + 16,
+                                    height: spotRect.height + 16,
+                                    boxShadow: "0 0 0 9999px rgba(0,0,0,0.78)",
+                                }}
+                            />
+                        </>
+                    )}
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[min(560px,90vw)] bg-[#0B1813] border border-[#CDB988]/40 rounded-2xl p-6 shadow-2xl text-[#D8C7A5] pointer-events-auto">
+                        <h3 className="font-heading text-xl font-bold text-[#E2CEAB] mb-2">
+                            {TUTORIAL_STEPS[tutorialStep].title}
+                        </h3>
+                        <p className="text-sm leading-relaxed text-[#BACDC2] mb-4">
+                            {TUTORIAL_STEPS[tutorialStep].desc}
+                        </p>
+                        <div className="flex justify-between items-center">
+                            <button
+                                onClick={() => {
+                                    setShowTutorial(false);
+                                    setTutorialStep(0);
+                                }}
+                                className="text-xs text-[#7E9385] hover:text-[#F5EFEB]"
+                            >
+                                Lewati
+                            </button>
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs text-[#7E9385]">
+                                    {tutorialStep + 1}/{TUTORIAL_STEPS.length}
+                                </span>
+                                {tutorialStep === 2 && (
+                                    <button
+                                        onClick={() => setTutorialStep(3)}
+                                        className="bg-[#D5BD8A] hover:bg-[#C4AC79] text-[#0A1612] font-semibold text-sm px-5 py-2 rounded-xl shadow-md transition-all"
+                                    >
+                                        Selanjutnya
+                                    </button>
+                                )}
+                                {tutorialStep === 6 && (
+                                    <button
+                                        onClick={() => setShowTutorial(false)}
+                                        className="bg-[#D5BD8A] hover:bg-[#C4AC79] text-[#0A1612] font-semibold text-sm px-5 py-2 rounded-xl shadow-md transition-all"
+                                    >
+                                        Selesai
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

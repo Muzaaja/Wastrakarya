@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CanvasController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserDrawingController;
 use Illuminate\Foundation\Application;
@@ -29,9 +30,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::get('/canvas', function () {
-    return Inertia::render('WastraCanvas');
-})->name('canvas');
+Route::get('/canvas', [CanvasController::class, 'index'])->name('canvas');
+Route::get('/canvas/{drawing}', [CanvasController::class, 'show'])->name('canvas.show');
 
 Route::get('/mockup', function () {
     return Inertia::render('WastraMockup');
@@ -43,6 +43,10 @@ Route::middleware('auth')->prefix('api/user-drawings')->name('api.user-drawings.
     Route::get('/{drawing}', [UserDrawingController::class, 'show']);
     Route::put('/{drawing}', [UserDrawingController::class, 'update']);
     Route::delete('/{drawing}', [UserDrawingController::class, 'destroy']);
+    Route::put('/{drawing}/share', [UserDrawingController::class, 'updateShare']);
+    Route::get('/{drawing}/collaborators', [UserDrawingController::class, 'getCollaborators']);
+    Route::post('/{drawing}/collaborators', [UserDrawingController::class, 'addCollaborator']);
+    Route::delete('/{drawing}/collaborators/{collaborator}', [UserDrawingController::class, 'removeCollaborator']);
 });
 
 require __DIR__.'/auth.php';

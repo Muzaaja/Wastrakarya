@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -16,6 +17,13 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    /**
+     * @var array<int, string>
+     */
+    protected $appends = [
+        'has_active_subscription',
+    ];
 
     /**
      * Get the attributes that should be cast.
@@ -32,8 +40,37 @@ class User extends Authenticatable
         ];
     }
 
-    public function drawings()
+    public function hasActiveSubscription(): bool
+    {
+        if (! $this->is_subscribed) {
+            return false;
+        }
+
+        if ($this->subscription_expires_at !== null && $this->subscription_expires_at->isPast()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function getHasActiveSubscriptionAttribute(): bool
+    {
+        return $this->hasActiveSubscription();
+    }
+
+    /**
+     * @return HasMany<UserDrawing, User>
+     */
+    public function drawings(): HasMany
     {
         return $this->hasMany(UserDrawing::class)->latest();
+    }
+
+    /**
+     * @return HasMany<UserDrawingCollaborator, User>
+     */
+    public function collaborations(): HasMany
+    {
+        return $this->hasMany(UserDrawingCollaborator::class);
     }
 }

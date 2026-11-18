@@ -6,10 +6,10 @@ import {
     Move, 
     ZoomIn, 
     Download, 
-    FileText, 
-    Check, 
     Sparkles,
-    Sliders
+    Loader2,
+    RectangleHorizontal,
+    Shirt,
 } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -26,21 +26,54 @@ const MOTIF_NAMES = {
     polos: 'Polos',
 };
 
+const MOCKUP_MODELS = {
+    shirt: {
+        label: 'Baju',
+        description: 'Kemeja lengan panjang',
+        path: '/shirt_mockup/scene.gltf',
+        rotationY: 0,
+    },
+    cloth: {
+        label: 'Kain Gantung',
+        description: 'Kain gantung',
+        path: '/cloth_mockup/hanging-cloth.glb',
+        rotationY: Math.PI,
+    },
+};
+
+const disposeMockupModel = (model) => {
+    model.traverse((node) => {
+        if (!node.isMesh) return;
+
+        node.geometry?.dispose();
+
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        materials.forEach((material) => material?.dispose());
+    });
+};
+
 export default function WastraMockup() {
     const mountRef = useRef(null);
     const rendererRef = useRef(null);
     const sceneRef = useRef(null);
     const cameraRef = useRef(null);
     const controlsRef = useRef(null);
-    const shirtMeshRef = useRef(null);
+    const mockupModelRef = useRef(null);
     const textureRef = useRef(null);
-    const materialRef = useRef(null);
 
     // State Parameter 3D
     const [motifScale, setMotifScale] = useState(1.0); // 50% = 0.5, 200% = 2.0
+    const motifScaleRef = useRef(motifScale);
     const [fabricType, setFabricType] = useState('sutra'); // 'sutra' atau 'linen'
+    const fabricTypeRef = useRef(fabricType);
+    const [mockupType, setMockupType] = useState('shirt');
+    const [isModelLoading, setIsModelLoading] = useState(true);
+    const [modelLoadError, setModelLoadError] = useState(false);
     const [activeControlMode, setActiveControlMode] = useState('orbit'); // 'orbit', 'pan', 'zoom'
     const [toastMessage, setToastMessage] = useState(null);
+
+    motifScaleRef.current = motifScale;
+    fabricTypeRef.current = fabricType;
 
     // State Info Karya
     const [projectTitle, setProjectTitle] = useState(null);
@@ -126,7 +159,7 @@ export default function WastraMockup() {
         }
     }, [user, savedDrawing]);
 
-    // Inisialisasi Three.js Scene, Camera, Lights, dan 3D Shirt Model
+    // Inisialisasi Three.js Scene, Camera, Lights, dan tekstur batik
     useEffect(() => {
         const container = mountRef.current;
         if (!container) return;
@@ -151,7 +184,7 @@ export default function WastraMockup() {
         renderer.setSize(width, height);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.type = THREE.PCFShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.15;
         container.appendChild(renderer.domElement);
@@ -223,89 +256,22 @@ export default function WastraMockup() {
         initialTex.needsUpdate = true;
         textureRef.current = initialTex;
 
-        // 7. Load model GLTF kemeja dari public/shirt_mockup/scene.gltf
-        const loader = new GLTFLoader();
-        loader.load(
-            '/shirt_mockup/scene.gltf',
-            (gltf) => {
-                const shirtObject = gltf.scene;
-
-                // Hitung bounding box untuk normalisasi ukuran model
-                const box = new THREE.Box3().setFromObject(shirtObject);
-                const center = box.getCenter(new THREE.Vector3());
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const scale = 3.8 / maxDim;
-
-                shirtObject.scale.setScalar(scale);
-                // Pindahkan ke pusat, lalu geser sedikit ke bawah
-                shirtObject.position.set(
-                    -center.x * scale,
-                    -center.y * scale + 0.1,
-                    -center.z * scale
-                );
-
-                // Pasang tekstur batik ke semua mesh
-                const batikTex = textureRef.current;
-                shirtObject.traverse((node) => {
-                    if (node.isMesh) {
-                        // Ganti material dengan MeshStandardMaterial menggunakan tekstur batik
-                        node.material = new THREE.MeshStandardMaterial({
-                            map: batikTex,
-                            roughness: 0.38,
-                            metalness: 0.08,
-                            side: THREE.DoubleSide,
-                        });
-                        node.castShadow = true;
-                        node.receiveShadow = true;
-                    }
-                });
-
-                shirtMeshRef.current = shirtObject;
-                materialRef.current = null; // Material disimpan per-node, bukan satu shared
-
-                scene.add(shirtObject);
-
-                // Jika ada desain pengguna, timpa tekstur
-                if (savedDataUrlRef.current) {
-                    createCustomBatikTexture(savedDataUrlRef.current, (customTex) => {
-                        customTex.wrapS = THREE.RepeatWrapping;
-                        customTex.wrapT = THREE.RepeatWrapping;
-                        const baseRep = 2 * motifScale;
-                        customTex.repeat.set(baseRep, baseRep);
-                        customTex.needsUpdate = true;
-                        textureRef.current = customTex;
-                        shirtObject.traverse((node) => {
-                            if (node.isMesh) {
-                                node.material.map = customTex;
-                                node.material.needsUpdate = true;
-                            }
-                        });
-                    });
-                }
-            },
-            undefined,
-            (error) => {
-                console.error('GLTF load error:', error);
-            }
-        );
-
-        // 8. Animasi Render Loop
+        // 7. Animasi Render Loop
         let animationFrameId;
         const animate = () => {
             animationFrameId = requestAnimationFrame(animate);
             controls.update();
 
             // Rotasi mengambang santai jika kursor tidak sedang berinteraksi
-            if (shirtMeshRef.current && (!controls.state || controls.state === -1)) {
-                shirtMeshRef.current.rotation.y += 0.0015;
+            if (mockupModelRef.current && (!controls.state || controls.state === -1)) {
+                mockupModelRef.current.rotation.y += 0.0015;
             }
 
             renderer.render(scene, camera);
         };
         animate();
 
-        // 9. Handle Resize Window
+        // 8. Handle Resize Window
         const handleResize = () => {
             if (!container || !renderer || !camera) return;
             const newW = container.clientWidth;
@@ -323,27 +289,124 @@ export default function WastraMockup() {
             if (renderer.domElement && container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
             }
+            if (mockupModelRef.current) {
+                scene.remove(mockupModelRef.current);
+                disposeMockupModel(mockupModelRef.current);
+                mockupModelRef.current = null;
+            }
+            textureRef.current?.dispose();
             renderer.dispose();
         };
     }, []);
 
+    // Muat dan ganti model mockup tanpa membuat ulang scene WebGL
+    useEffect(() => {
+        const scene = sceneRef.current;
+        const selectedModel = MOCKUP_MODELS[mockupType];
+        if (!scene || !selectedModel) return;
+
+        let isCancelled = false;
+        setIsModelLoading(true);
+        setModelLoadError(false);
+
+        const loader = new GLTFLoader();
+        loader.load(
+            selectedModel.path,
+            (gltf) => {
+                const mockupObject = gltf.scene;
+
+                if (isCancelled) {
+                    disposeMockupModel(mockupObject);
+                    return;
+                }
+
+                mockupObject.rotation.y = selectedModel.rotationY;
+                mockupObject.updateMatrixWorld(true);
+
+                const box = new THREE.Box3().setFromObject(mockupObject);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                const maxDimension = Math.max(size.x, size.y, size.z);
+                const normalizedScale = 3.8 / maxDimension;
+
+                mockupObject.scale.setScalar(normalizedScale);
+                mockupObject.position.set(
+                    -center.x * normalizedScale,
+                    -center.y * normalizedScale + 0.1,
+                    -center.z * normalizedScale
+                );
+
+                const isSilk = fabricTypeRef.current === 'sutra';
+                mockupObject.traverse((node) => {
+                    if (!node.isMesh) return;
+
+                    node.material = new THREE.MeshStandardMaterial({
+                        map: textureRef.current,
+                        roughness: isSilk ? 0.35 : 0.88,
+                        metalness: isSilk ? 0.1 : 0,
+                        side: THREE.DoubleSide,
+                    });
+                    node.castShadow = true;
+                    node.receiveShadow = true;
+                });
+
+                const previousModel = mockupModelRef.current;
+                scene.add(mockupObject);
+                mockupModelRef.current = mockupObject;
+
+                if (previousModel) {
+                    scene.remove(previousModel);
+                    disposeMockupModel(previousModel);
+                }
+
+                setIsModelLoading(false);
+            },
+            undefined,
+            (error) => {
+                if (isCancelled) return;
+
+                console.error(`GLTF load error for ${mockupType}:`, error);
+                setIsModelLoading(false);
+                setModelLoadError(true);
+            }
+        );
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [mockupType]);
+
     // Update tekstur jika savedDataUrl berubah (setelah scene sudah init)
     useEffect(() => {
-        if (!savedDataUrl || !shirtMeshRef.current) return;
+        if (!savedDataUrl) return;
+
+        let isCancelled = false;
         createCustomBatikTexture(savedDataUrl, (customTex) => {
+            if (isCancelled) {
+                customTex.dispose();
+                return;
+            }
+
             customTex.wrapS = THREE.RepeatWrapping;
             customTex.wrapT = THREE.RepeatWrapping;
-            const baseRep = 2 * motifScale;
+            const baseRep = 2 * motifScaleRef.current;
             customTex.repeat.set(baseRep, baseRep);
             customTex.needsUpdate = true;
+
+            const previousTexture = textureRef.current;
             textureRef.current = customTex;
-            shirtMeshRef.current.traverse((node) => {
+            mockupModelRef.current?.traverse((node) => {
                 if (node.isMesh) {
                     node.material.map = customTex;
                     node.material.needsUpdate = true;
                 }
             });
+            previousTexture?.dispose();
         });
+
+        return () => {
+            isCancelled = true;
+        };
     }, [savedDataUrl]);
 
     // Update Motif Scale (50% - 200%)
@@ -353,8 +416,8 @@ export default function WastraMockup() {
         textureRef.current.repeat.set(baseRep, baseRep);
         textureRef.current.needsUpdate = true;
         // Refresh semua mesh material agar texture repeat ter-apply
-        if (shirtMeshRef.current) {
-            shirtMeshRef.current.traverse((node) => {
+        if (mockupModelRef.current) {
+            mockupModelRef.current.traverse((node) => {
                 if (node.isMesh && node.material.map) {
                     node.material.map.needsUpdate = true;
                 }
@@ -364,8 +427,8 @@ export default function WastraMockup() {
 
     // Update Karakteristik Bahan Kain (Sutra vs Linen)
     useEffect(() => {
-        if (!shirtMeshRef.current) return;
-        shirtMeshRef.current.traverse((node) => {
+        if (!mockupModelRef.current) return;
+        mockupModelRef.current.traverse((node) => {
             if (node.isMesh) {
                 if (fabricType === 'sutra') {
                     // Sutra: Halus, berkilau lembut, reflektif
@@ -411,7 +474,8 @@ export default function WastraMockup() {
         const dataUrl = renderer.domElement.toDataURL('image/png');
 
         const link = document.createElement('a');
-        link.download = `mockup-3d-${projectTitle.toLowerCase().replace(/\s+/g, '-')}-${fabricType}.png`;
+        const normalizedTitle = (projectTitle || 'wastra').toLowerCase().replace(/\s+/g, '-');
+        link.download = `mockup-3d-${normalizedTitle}-${mockupType}-${fabricType}.png`;
         link.href = dataUrl;
         link.click();
         showToast('Mockup 3D berhasil diunduh (PNG)');
@@ -462,7 +526,7 @@ export default function WastraMockup() {
                             {projectTitle}
                         </h1>
                         <p className="text-sm text-[#7E9385] mt-1 font-medium">
-                            Kemeja lengan panjang
+                            {MOCKUP_MODELS[mockupType].description}
                         </p>
                     </div>
                 )}
@@ -477,6 +541,22 @@ export default function WastraMockup() {
                         ref={mountRef} 
                         className="w-full h-full relative cursor-grab active:cursor-grabbing z-10" 
                     />
+
+                    {/* Status pemuatan model saat pengguna mengganti mockup */}
+                    {(isModelLoading || modelLoadError) && (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                            <div className="flex items-center gap-2.5 rounded-full border border-[#2C483A] bg-[#0B1813]/90 px-4 py-2 text-xs font-medium text-[#BACDC2] shadow-xl backdrop-blur-md">
+                                {isModelLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin text-[#D5BD8A]" />
+                                        <span>Memuat model {MOCKUP_MODELS[mockupType].label}...</span>
+                                    </>
+                                ) : (
+                                    <span>Model gagal dimuat.</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Floating Controls di Bawah Baju (Orbit, Pan, Zoom) */}
                     <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
@@ -533,14 +613,55 @@ export default function WastraMockup() {
 
                 {/* 3. PANEL SEBELAH KANAN (PARAMETER 3D) */}
                 <aside className="w-80 h-full p-6 flex flex-col justify-center z-20 shrink-0">
-                    <div className="bg-[#0A1712] border border-[#1E362C] rounded-2xl p-6 shadow-2xl flex flex-col justify-between">
+                    <div className="max-h-full overflow-y-auto bg-[#0A1712] border border-[#1E362C] rounded-2xl p-6 shadow-2xl flex flex-col justify-between">
                         <div>
                             {/* Header Panel */}
                             <h2 className="font-heading text-2xl font-semibold text-[#E2CEAB]">
                                 Parameter 3D
                             </h2>
 
-                            {/* Kontrol 1: Motif Scale */}
+                            {/* Kontrol Model Mockup */}
+                            <div className="mt-6 mb-6">
+                                <p className="text-xs font-medium text-[#7E9385] mb-3">
+                                    Model Mockup
+                                </p>
+
+                                <div className="grid grid-cols-2 gap-2.5" role="group" aria-label="Pilih model mockup">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMockupType('shirt');
+                                        }}
+                                        aria-pressed={mockupType === 'shirt'}
+                                        className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-3 text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D5BD8A] ${
+                                            mockupType === 'shirt'
+                                                ? 'bg-[#142920] border-[#CDB988] text-[#F5EFEB] shadow-sm'
+                                                : 'bg-[#08140F] border-[#182C24] text-[#7E9385] hover:border-[#2C483A] hover:text-[#BACDC2]'
+                                        }`}
+                                    >
+                                        <Shirt size={20} />
+                                        <span>Baju</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMockupType('cloth');
+                                        }}
+                                        aria-pressed={mockupType === 'cloth'}
+                                        className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-3 text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D5BD8A] ${
+                                            mockupType === 'cloth'
+                                                ? 'bg-[#142920] border-[#CDB988] text-[#F5EFEB] shadow-sm'
+                                                : 'bg-[#08140F] border-[#182C24] text-[#7E9385] hover:border-[#2C483A] hover:text-[#BACDC2]'
+                                        }`}
+                                    >
+                                        <RectangleHorizontal size={20} />
+                                        <span>Kain Gantung</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Kontrol Motif Scale */}
                             <div className="mb-6">
                                 <div className="flex items-center justify-between text-xs mb-3">
                                     <span className="font-medium text-[#BACDC2]">Motif Scale</span>

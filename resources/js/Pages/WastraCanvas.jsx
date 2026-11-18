@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import {
     Undo2,
     Redo2,
@@ -32,18 +32,33 @@ import {
     Loader2,
     RotateCcw,
     InfoIcon,
+    Share2,
+    Users,
+    Lock,
+    Globe,
+    Crown,
 } from "lucide-react";
 import {
     BATIK_MOTIFS,
     renderDottedGuide,
     autoTraceMotifWax,
 } from "@/Components/WastraCanvas/BatikMotifs";
+import getEcho from "@/echo";
+import ShareModal from "@/Components/WastraCanvas/ShareModal";
+import SubscriptionModal from "@/Components/WastraCanvas/SubscriptionModal";
 
-export default function WastraCanvas() {
+const CANVAS_SYNC_CHUNK_SIZE = 6000;
+const CANVAS_SYNC_MAX_CHUNKS = 2000;
+const CANVAS_SYNC_TIMEOUT_MS = 15000;
+
+export default function WastraCanvas({ initialDrawing = null, canvasId = null }) {
     // Canvas ref & Context
     const canvasRef = useRef(null); // visible display canvas
     const containerRef = useRef(null);
     const artworkCanvasRef = useRef(null); // offscreen artwork store (world coords)
+    const canvasBaseLayerRef = useRef(null); // cached cloth, motif guide, and grid
+    const canvasBaseLayerKeyRef = useRef("");
+    const renderFrameRef = useRef(null);
 
     // Konfigurasi Kanvas
     const canvasWidth = 960;
@@ -68,7 +83,9 @@ export default function WastraCanvas() {
     ];
 
     // State Preset Motif Batik & Garis Panduan Titik-Titik
-    const [selectedMotif, setSelectedMotif] = useState("kawung");
+    const [selectedMotif, setSelectedMotif] = useState(
+        initialDrawing?.motif || "kawung",
+    );
     const [showGuide, setShowGuide] = useState(true);
     const [guideOpacity, setGuideOpacity] = useState(0.75);
     const [showTileGrid, setShowTileGrid] = useState(false);
@@ -119,13 +136,74 @@ export default function WastraCanvas() {
     const [tutorialStep, setTutorialStep] = useState(0);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [detailMotifModal, setDetailMotifModal] = useState(null);
-    const [projectTitle, setProjectTitle] = useState("Karya tanpa judul");
+    const [projectTitle, setProjectTitle] = useState(
+        initialDrawing?.title || "Karya tanpa judul",
+    );
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [showSaveDialog, setShowSaveDialog] = useState(false);
     const [saveNameInput, setSaveNameInput] = useState("");
     const [saveRedirect, setSaveRedirect] = useState(null);
     const [restoreDrawing, setRestoreDrawing] = useState(false);
-    const [loadedDrawingId, setLoadedDrawingId] = useState(null);
+    const [loadedDrawingId, setLoadedDrawingId] = useState(
+        initialDrawing?.id || canvasId || null,
+    );
+
+    // State Kolaborasi Realtime & Berbagi
+    const [shareType, setShareType] = useState(
+        initialDrawing?.share_type || "private",
+    );
+    const [shareToken, setShareToken] = useState(
+        initialDrawing?.share_token || null,
+    );
+    const [isOwner, setIsOwner] = useState(
+        initialDrawing ? Boolean(initialDrawing.is_owner) : true,
+    );
+    const [canvasOwner, setCanvasOwner] = useState(
+        initialDrawing?.owner || null,
+    );
+    const [shareModalOpen, setShareModalOpen] = useState(false);
+    const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+    const [activeCollaborators, setActiveCollaborators] = useState([]);
+    const [remoteCursors, setRemoteCursors] = useState({});
+    const canvasChannelRef = useRef(null);
+    const currentChannelDrawingId = useRef(null);
+    const incomingCanvasSyncsRef = useRef(new Map());
+    const lastCursorBroadcastRef = useRef(0);
+
+    const hasActiveSubscription = Boolean(
+        user?.has_active_subscription ?? user?.is_subscribed,
+    );
+
+    const applyMotifSelection = useCallback(
+        (
+            motifId,
+            { broadcastChange = false, markUnsaved = false } = {},
+        ) => {
+            if (!motifId) return;
+
+            setSelectedMotif(motifId);
+            setShowGuide(motifId !== "polos" && motifId !== "none");
+
+            if (markUnsaved) {
+                setHasUnsavedChanges(true);
+            }
+
+            if (
+                broadcastChange &&
+                canvasChannelRef.current &&
+                loadedDrawingId
+            ) {
+                try {
+                    canvasChannelRef.current.whisper("motif", {
+                        motif: motifId,
+                        userId: user?.id,
+                        userName: user?.name,
+                    });
+                } catch (_) {}
+            }
+        },
+        [loadedDrawingId, user?.id, user?.name],
+    );
 
     // Helper Toast
     const showToast = (msg) => {
@@ -155,7 +233,13 @@ export default function WastraCanvas() {
             });
             if (!res.ok) throw new Error("Gagal memuat simpanan karya");
             const data = await res.json();
-            setSavedDrawings(Array.isArray(data) ? data : []);
+            if (Array.isArray(data)) {
+                setSavedDrawings(data);
+            } else if (data && Array.isArray(data.own)) {
+                setSavedDrawings([...data.own, ...(data.shared || [])]);
+            } else {
+                setSavedDrawings([]);
+            }
         } catch (err) {
             console.error(err);
             showToast("Gagal memuat simpanan karya");
@@ -247,6 +331,14 @@ export default function WastraCanvas() {
         const ctx = artwork.getContext("2d");
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
         renderMainCanvas();
+        if (canvasChannelRef.current && loadedDrawingId) {
+            try {
+                canvasChannelRef.current.whisper("clear", {
+                    userId: user?.id,
+                    userName: user?.name,
+                });
+            } catch (_) {}
+        }
         setStatusMessage("Kanvas dibersihkan. Siap untuk goresan baru.");
         showToast("Kanvas telah dibersihkan");
         setShowMoreMenu(false);
@@ -280,6 +372,17 @@ export default function WastraCanvas() {
         autoTraceMotifWax(ctx, selectedMotif, 160, waxColor, cantingSize);
         ctx.restore();
         renderMainCanvas();
+        if (canvasChannelRef.current && loadedDrawingId) {
+            try {
+                canvasChannelRef.current.whisper("trace", {
+                    motif: selectedMotif,
+                    color: waxColor,
+                    size: cantingSize,
+                    userId: user?.id,
+                    userName: user?.name,
+                });
+            } catch (_) {}
+        }
         setStatusMessage(
             `Pola ${selectedMotif} berhasil dijiplak dengan lilin malam.`,
         );
@@ -289,6 +392,11 @@ export default function WastraCanvas() {
 
     // Simpan Karya ke Database (User yang login) atau LocalStorage (tamu)
     const handleSave = async (redirectTo = null) => {
+        if (user && loadedDrawingId && !isOwner) {
+            showToast("Hanya pemilik kanvas yang dapat menyimpan perubahan");
+            return;
+        }
+
         const artwork = getArtworkCanvas();
         if (!artwork) return;
         setSaveRedirect(redirectTo);
@@ -298,11 +406,19 @@ export default function WastraCanvas() {
     };
 
     // Konfirmasi simpan dengan nama karya dari popup
-    const handleConfirmSave = async () => {
+    const handleConfirmSave = async (customTitle = null, openShareAfterSave = false) => {
+        if (user && loadedDrawingId && !isOwner) {
+            setShowSaveDialog(false);
+            showToast("Hanya pemilik kanvas yang dapat menyimpan perubahan");
+            return;
+        }
+
         const artwork = getArtworkCanvas();
         if (!artwork) return;
 
-        const title = saveNameInput.trim() || projectTitle;
+        const title = (typeof customTitle === "string" && customTitle.trim())
+            ? customTitle.trim()
+            : (saveNameInput.trim() || projectTitle);
         const payload = {
             title,
             motif: selectedMotif,
@@ -334,8 +450,17 @@ export default function WastraCanvas() {
                 const data = await res.json();
                 setHasUnsavedChanges(false);
                 await fetchSavedDrawings();
-                if (data?.id) setLoadedDrawingId(data.id); // catatan baru jadi motif aktif
+                if (data?.id) {
+                    setLoadedDrawingId(data.id);
+                    if (data.share_type) setShareType(data.share_type);
+                    if (data.share_token) setShareToken(data.share_token);
+                    if (data.is_owner !== undefined) setIsOwner(data.is_owner);
+                    if (data.owner) setCanvasOwner(data.owner);
+                }
                 showToast("Karya berhasil disimpan!");
+                if (openShareAfterSave && data?.id) {
+                    setShareModalOpen(true);
+                }
                 return data;
             } catch (e) {
                 console.error(e);
@@ -411,6 +536,29 @@ export default function WastraCanvas() {
         }
     };
 
+    // Buka Modal Berbagi & Kolaborasi
+    const handleOpenShare = async () => {
+        if (!isOwner) return;
+
+        if (!user) {
+            showToast("Silakan masuk terlebih dahulu untuk membagikan kanvas.");
+            return;
+        }
+
+        // Gatekeep fitur kolaborasi hanya untuk pengguna dengan paket langganan aktif
+        if (!hasActiveSubscription) {
+            setShowSubscriptionModal(true);
+            return;
+        }
+
+        if (!loadedDrawingId) {
+            showToast("Menyiapkan dan menyimpan kanvas terlebih dahulu...");
+            await handleConfirmSave(null, true);
+            return;
+        }
+        setShareModalOpen(true);
+    };
+
     // Muat simpanan karya ke kanvas
     const handleLoadDrawing = useCallback((drawing) => {
         const artwork = getArtworkCanvas();
@@ -425,19 +573,27 @@ export default function WastraCanvas() {
         };
         img.src = drawing.data_url;
         if (drawing.title) setProjectTitle(drawing.title);
-        if (drawing.motif) setSelectedMotif(drawing.motif);
+        if (drawing.motif) applyMotifSelection(drawing.motif);
         if (drawing.wax_color) setWaxColor(drawing.wax_color);
         if (drawing.wax_color_name) setWaxColorName(drawing.wax_color_name);
-        if (drawing.motif === "polos") {
-            setShowGuide(false);
-        } else {
-            setShowGuide(true);
-        }
         setHasUnsavedChanges(false);
         setActiveTab("all");
         setLoadedDrawingId(drawing.id ?? null);
+        if (drawing.share_type) setShareType(drawing.share_type);
+        if (drawing.share_token) setShareToken(drawing.share_token);
+        const drawingIsOwner = drawing.is_owner !== undefined
+            ? Boolean(drawing.is_owner)
+            : Number(drawing.user_id) === Number(user?.id);
+        const drawingOwner = drawing.owner || drawing.user || (
+            drawingIsOwner && user
+                ? { id: user.id, name: user.name }
+                : null
+        );
+        setIsOwner(drawingIsOwner);
+        setCanvasOwner(drawingOwner);
+        if (!drawingIsOwner) setShareModalOpen(false);
         showToast(`Karya "${drawing.title}" dimuat`);
-    }, []);
+    }, [applyMotifSelection, user?.id]);
 
     // Hapus simpanan karya dari database
     const handleDeleteDrawing = useCallback(
@@ -606,31 +762,35 @@ export default function WastraCanvas() {
         return artworkCanvasRef.current;
     }, [canvasWidth, canvasHeight]);
 
-    const renderMainCanvas = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        const artwork = getArtworkCanvas();
+    const getCanvasBaseLayer = useCallback(() => {
+        if (!canvasBaseLayerRef.current) {
+            const canvas = document.createElement("canvas");
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            canvasBaseLayerRef.current = canvas;
+        }
 
-        // Clear display canvas fully
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const baseLayer = canvasBaseLayerRef.current;
+        const cacheKey = [
+            canvasWidth,
+            canvasHeight,
+            showGuide,
+            selectedMotif,
+            guideOpacity,
+            showTileGrid,
+        ].join(":");
 
-        ctx.save();
-        // Transformasi Pan & Zoom
-        ctx.translate(pan.x, pan.y);
-        ctx.scale(zoom, zoom);
+        if (canvasBaseLayerKeyRef.current === cacheKey) {
+            return baseLayer;
+        }
 
-        // Clip all world-space rendering to the canvas boundary so nothing
-        // (background, guide, artwork) leaks outside the kain area when zoomed out.
-        ctx.beginPath();
-        ctx.rect(0, 0, canvasWidth, canvasHeight);
-        ctx.clip();
+        const ctx = baseLayer.getContext("2d");
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-        // 1. Latar Kain Mori Khas Batik (Warna Krem Halus & Tekstur Tenun Serat)
+        // Latar kain dan teksturnya bersifat statis, sehingga cukup diraster sekali.
         ctx.fillStyle = "#F5EFEB";
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-        // Tekstur Tenun Halus Kain Mori
         ctx.fillStyle = "rgba(0, 0, 0, 0.012)";
         for (let x = 0; x < canvasWidth; x += 4) {
             ctx.fillRect(x, 0, 1, canvasHeight);
@@ -639,36 +799,29 @@ export default function WastraCanvas() {
             ctx.fillRect(0, y, canvasWidth, 1);
         }
 
-        // 2. Garis Panduan Titik-Titik (tiled, clipped to canvas bounds)
         if (
             showGuide &&
             selectedMotif &&
             selectedMotif !== "polos" &&
             selectedMotif !== "none"
         ) {
-            const minCol = Math.floor(-pan.x / zoom / TILE_SIZE) - 1;
-            const maxCol =
-                Math.ceil((canvasWidth - pan.x) / zoom / TILE_SIZE) + 1;
-            const minRow = Math.floor(-pan.y / zoom / TILE_SIZE) - 1;
-            const maxRow =
-                Math.ceil((canvasHeight - pan.y) / zoom / TILE_SIZE) + 1;
+            const guideTile = document.createElement("canvas");
+            guideTile.width = TILE_SIZE;
+            guideTile.height = TILE_SIZE;
+            renderDottedGuide(
+                guideTile.getContext("2d"),
+                selectedMotif,
+                TILE_SIZE,
+                guideOpacity,
+            );
 
-            for (let c = minCol; c <= maxCol; c++) {
-                for (let r = minRow; r <= maxRow; r++) {
-                    ctx.save();
-                    ctx.translate(c * TILE_SIZE, r * TILE_SIZE);
-                    renderDottedGuide(
-                        ctx,
-                        selectedMotif,
-                        TILE_SIZE,
-                        guideOpacity,
-                    );
-                    ctx.restore();
-                }
+            const guidePattern = ctx.createPattern(guideTile, "repeat");
+            if (guidePattern) {
+                ctx.fillStyle = guidePattern;
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
             }
         }
 
-        // 3. Garis Batas Kanvas (Jika Diaktifkan)
         if (showTileGrid) {
             ctx.save();
             ctx.strokeStyle = "rgba(164, 140, 92, 0.3)";
@@ -676,7 +829,6 @@ export default function WastraCanvas() {
             ctx.setLineDash([3, 4]);
             ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
-            // Also show tile grid lines
             for (let x = 0; x <= canvasWidth; x += TILE_SIZE) {
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
@@ -692,7 +844,41 @@ export default function WastraCanvas() {
             ctx.restore();
         }
 
-        // 4. Lukisan Lilin (artwork) di atas latar & panduan
+        canvasBaseLayerKeyRef.current = cacheKey;
+
+        return baseLayer;
+    }, [
+        canvasWidth,
+        canvasHeight,
+        showGuide,
+        selectedMotif,
+        guideOpacity,
+        showTileGrid,
+    ]);
+
+    const renderMainCanvas = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        const artwork = getArtworkCanvas();
+        const baseLayer = getCanvasBaseLayer();
+
+        // Clear display canvas fully
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        // Transformasi Pan & Zoom
+        ctx.translate(pan.x, pan.y);
+        ctx.scale(zoom, zoom);
+
+        // Clip all world-space rendering to the canvas boundary so nothing
+        // (background, guide, artwork) leaks outside the kain area when zoomed out.
+        ctx.beginPath();
+        ctx.rect(0, 0, canvasWidth, canvasHeight);
+        ctx.clip();
+
+        // Static layers are cached; only the artwork changes while drawing.
+        ctx.drawImage(baseLayer, 0, 0);
         ctx.drawImage(artwork, 0, 0);
 
         ctx.restore();
@@ -701,16 +887,35 @@ export default function WastraCanvas() {
         zoom,
         canvasWidth,
         canvasHeight,
-        showGuide,
-        selectedMotif,
-        guideOpacity,
-        showTileGrid,
         getArtworkCanvas,
+        getCanvasBaseLayer,
     ]);
 
+    const renderMainCanvasRef = useRef(renderMainCanvas);
     useEffect(() => {
-        renderMainCanvas();
+        renderMainCanvasRef.current = renderMainCanvas;
     }, [renderMainCanvas]);
+
+    const scheduleMainCanvasRender = useCallback(() => {
+        if (renderFrameRef.current !== null) return;
+
+        renderFrameRef.current = window.requestAnimationFrame(() => {
+            renderFrameRef.current = null;
+            renderMainCanvasRef.current();
+        });
+    }, []);
+
+    useEffect(() => {
+        scheduleMainCanvasRender();
+    }, [renderMainCanvas, scheduleMainCanvasRender]);
+
+    useEffect(() => {
+        return () => {
+            if (renderFrameRef.current !== null) {
+                window.cancelAnimationFrame(renderFrameRef.current);
+            }
+        };
+    }, []);
 
     // Konfigurasi stroke berdasarkan alat aktif
     const getActiveToolConfig = useCallback(() => {
@@ -742,6 +947,43 @@ export default function WastraCanvas() {
         ctx.restore();
     };
 
+    // Menggambar goresan dari kolaborator remote
+    const drawRemoteStamp = (x, y, r, color, erase) => {
+        const artwork = getArtworkCanvas();
+        if (!artwork) return;
+        const ctx = artwork.getContext("2d");
+
+        ctx.save();
+        ctx.globalCompositeOperation = erase
+            ? "destination-out"
+            : "source-over";
+        ctx.fillStyle = erase ? "#000000" : color;
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    };
+
+    const drawRemoteLineBetween = (p1, p2, size, color, erase) => {
+        const r = size / 2;
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const dist = Math.hypot(dx, dy);
+        const stepSize = Math.max(1, r / 3);
+        const steps = Math.ceil(dist / stepSize);
+
+        for (let i = 0; i <= steps; i++) {
+            const t = steps === 0 ? 0 : i / steps;
+            const wx = p1.x + dx * t;
+            const wy = p1.y + dy * t;
+            drawRemoteStamp(wx, wy, r, color, erase);
+        }
+
+        scheduleMainCanvasRender();
+    };
+
     const drawLineBetween = (p1, p2) => {
         const { size, color, erase } = getActiveToolConfig();
         const r = size / 2;
@@ -759,8 +1001,23 @@ export default function WastraCanvas() {
             drawStamp(wx, wy, r, color, erase);
         }
 
+        // Siarkan goresan ke kolaborator secara realtime
+        if (canvasChannelRef.current && loadedDrawingId) {
+            try {
+                canvasChannelRef.current.whisper("stroke", {
+                    p1: { x: p1.x, y: p1.y },
+                    p2: { x: p2.x, y: p2.y },
+                    size,
+                    color,
+                    erase,
+                    userId: user?.id,
+                    userName: user?.name,
+                });
+            } catch (_) {}
+        }
+
         // Repaint display so the new stroke is visible immediately
-        renderMainCanvas();
+        scheduleMainCanvasRender();
     };
 
     // Konversi Posisi Layar ke Titik Dunia Kanvas
@@ -833,6 +1090,13 @@ export default function WastraCanvas() {
             return;
         }
 
+        // Gatekeep editing: jika bukan pemilik, hanya user berlangganan yang dapat mengedit bersama
+        if (!isOwner && !hasActiveSubscription) {
+            showToast("Kolaborasi pengeditan membutuhkan paket langganan aktif.");
+            setShowSubscriptionModal(true);
+            return;
+        }
+
         try {
             e.currentTarget.setPointerCapture(e.pointerId);
         } catch (_) {}
@@ -871,6 +1135,24 @@ export default function WastraCanvas() {
         const currentPos = getCanvasCoords(e);
         if (!currentPos) return;
         setCursorPos(currentPos);
+
+        // Siarkan posisi kursor ke kolaborator secara realtime (throttled)
+        if (canvasChannelRef.current && loadedDrawingId && currentPos && user) {
+            const now = Date.now();
+            if (now - lastCursorBroadcastRef.current > 40) {
+                lastCursorBroadcastRef.current = now;
+                try {
+                    canvasChannelRef.current.whisper("cursor", {
+                        userId: user.id,
+                        userName: user.name,
+                        x: currentPos.x,
+                        y: currentPos.y,
+                        tool: activeTool,
+                        color: waxColor,
+                    });
+                } catch (_) {}
+            }
+        }
 
         // Calculate cursor angle for swing effect (rotation based on movement direction)
         if (prevCursorRef.current) {
@@ -1009,8 +1291,13 @@ export default function WastraCanvas() {
         setPan({ x: 0, y: 0 });
     };
 
-    // Pulihkan Karya dari LocalStorage (sesi kembali dari Mockup maupun simpanan tamu)
+    // Pulihkan Karya dari Initial Props (Dedicated Link /canvas/{id}) atau LocalStorage
     useEffect(() => {
+        if (initialDrawing) {
+            handleLoadDrawing(initialDrawing);
+            return;
+        }
+
         try {
             // Prioritaskan snapshot sesi (malam, warna, status kanvas) dari kembali Mockup
             const session = localStorage.getItem("wastrakarya_studio_session");
@@ -1092,12 +1379,16 @@ export default function WastraCanvas() {
         }
     }, [user, fetchSavedDrawings]);
 
-    // Muat motif yang dipilih dari halaman Welcome (/canvas?drawing=ID)
+    // Muat motif yang dipilih dari URL (/canvas?drawing=ID atau /canvas?share=TOKEN)
     useEffect(() => {
-        if (!user) return;
         const params = new URLSearchParams(window.location.search);
-        const drawingId = params.get("drawing");
+        const drawingId = params.get("drawing") || params.get("share");
         if (!drawingId) return;
+
+        if (!user) {
+            showToast("Silakan masuk terlebih dahulu untuk membuka karya ini.");
+            return;
+        }
 
         let cancelled = false;
         (async () => {
@@ -1111,6 +1402,13 @@ export default function WastraCanvas() {
                             : {}),
                     },
                 });
+                if (res.status === 403) {
+                    if (!cancelled)
+                        showToast(
+                            "Akses ditolak: Anda tidak memiliki izin untuk membuka kanvas ini.",
+                        );
+                    return;
+                }
                 if (!res.ok) throw new Error("Gagal memuat karya");
                 const data = await res.json();
                 if (!cancelled) {
@@ -1126,6 +1424,426 @@ export default function WastraCanvas() {
             cancelled = true;
         };
     }, [user, handleLoadDrawing]);
+
+    // Ref untuk data dinamis agar listener kolaborasi tidak menjadi stale
+    // saat effect presence-channel tidak perlu dijalankan ulang.
+    const collabStateRef = useRef({
+        userId: user?.id ?? null,
+        userName: user?.name ?? null,
+        projectTitle,
+        cantingSize,
+        waxColor,
+        selectedMotif,
+    });
+    useEffect(() => {
+        collabStateRef.current = {
+            userId: user?.id ?? null,
+            userName: user?.name ?? null,
+            projectTitle,
+            cantingSize,
+            waxColor,
+            selectedMotif,
+        };
+    }, [
+        user?.id,
+        user?.name,
+        projectTitle,
+        cantingSize,
+        waxColor,
+        selectedMotif,
+    ]);
+
+    // Sesi Kolaborasi Realtime via Laravel Echo (Reverb Presence Channel)
+    useEffect(() => {
+        const userId = user?.id ?? null;
+        if (!userId || !loadedDrawingId) {
+            if (canvasChannelRef.current) {
+                const echo = getEcho();
+                if (echo && currentChannelDrawingId.current) {
+                    echo.leave(`canvas.${currentChannelDrawingId.current}`);
+                }
+                canvasChannelRef.current = null;
+                currentChannelDrawingId.current = null;
+            }
+            setActiveCollaborators([]);
+            setRemoteCursors({});
+            return;
+        }
+
+        const echo = getEcho();
+        if (!echo) return;
+
+        const channelName = `canvas.${loadedDrawingId}`;
+        if (
+            canvasChannelRef.current &&
+            currentChannelDrawingId.current === loadedDrawingId
+        ) {
+            return;
+        }
+
+        if (canvasChannelRef.current && currentChannelDrawingId.current) {
+            echo.leave(`canvas.${currentChannelDrawingId.current}`);
+            canvasChannelRef.current = null;
+        }
+
+        currentChannelDrawingId.current = loadedDrawingId;
+        const channel = echo.join(channelName);
+        canvasChannelRef.current = channel;
+
+        const applySyncedCanvas = (dataUrl) => {
+            const artwork = getArtworkCanvas();
+            if (!artwork || !dataUrl) return;
+
+            const ctx = artwork.getContext("2d");
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                ctx.drawImage(img, 0, 0);
+                renderMainCanvasRef.current();
+            };
+            img.src = dataUrl;
+        };
+
+        channel
+            .here((members) => {
+                const activeMembers = members || [];
+                setActiveCollaborators(activeMembers);
+
+                const syncSource =
+                    activeMembers.find(
+                        (member) =>
+                            String(member.id) !== String(userId) &&
+                            member.is_owner,
+                    ) ||
+                    activeMembers.find(
+                        (member) => String(member.id) !== String(userId),
+                    );
+
+                if (syncSource) {
+                    channel.whisper("request_sync", {
+                        requesterId: userId,
+                        sourceUserId: syncSource.id,
+                    });
+                }
+            })
+            .joining((member) => {
+                setActiveCollaborators((prev) => {
+                    const nextMembers = [
+                        ...prev.filter((m) => m.id !== member.id),
+                        member,
+                    ];
+
+                    return nextMembers;
+                });
+                showToast(`${member.name} bergabung ke sesi kolaborasi`);
+            })
+            .leaving((member) => {
+                setActiveCollaborators((prev) => {
+                    const nextMembers = prev.filter(
+                        (m) => m.id !== member.id,
+                    );
+
+                    return nextMembers;
+                });
+                setRemoteCursors((prev) => {
+                    const copy = { ...prev };
+                    delete copy[member.id];
+                    return copy;
+                });
+                showToast(`${member.name} meninggalkan sesi kolaborasi`);
+            })
+            .listenForWhisper("stroke", (data) => {
+                if (!data || !data.p1 || !data.p2) return;
+                const { cantingSize: fallbackSize, waxColor: fallbackColor } =
+                    collabStateRef.current;
+                drawRemoteLineBetween(
+                    data.p1,
+                    data.p2,
+                    data.size || fallbackSize,
+                    data.color || fallbackColor || "#CDB988",
+                    Boolean(data.erase),
+                );
+            })
+            .listenForWhisper("cursor", (data) => {
+                if (
+                    !data ||
+                    !data.userId ||
+                    data.userId === collabStateRef.current.userId
+                )
+                    return;
+                setRemoteCursors((prev) => ({
+                    ...prev,
+                    [data.userId]: {
+                        x: data.x,
+                        y: data.y,
+                        userName: data.userName,
+                        tool: data.tool,
+                        color: data.color,
+                        updatedAt: Date.now(),
+                    },
+                }));
+            })
+            .listenForWhisper("clear", (data) => {
+                const artwork = getArtworkCanvas();
+                if (!artwork) return;
+                const ctx = artwork.getContext("2d");
+                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                renderMainCanvasRef.current();
+                showToast(
+                    `${data?.userName || "Kolaborator"} membersihkan kanvas`,
+                );
+            })
+            .listenForWhisper("trace", (data) => {
+                const artwork = getArtworkCanvas();
+                if (!artwork || !data?.motif) return;
+                const { cantingSize: fallbackSize, waxColor: fallbackColor } =
+                    collabStateRef.current;
+                const ctx = artwork.getContext("2d");
+                const cx = canvasWidth / 2;
+                const cy = canvasHeight / 2;
+                const scale = Math.min(canvasWidth, canvasHeight) / 160;
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.scale(scale, scale);
+                ctx.translate(-80, -80);
+                autoTraceMotifWax(
+                    ctx,
+                    data.motif,
+                    160,
+                    data.color || fallbackColor,
+                    data.size || fallbackSize,
+                );
+                ctx.restore();
+                renderMainCanvasRef.current();
+                showToast(
+                    `${data?.userName || "Kolaborator"} menjiplak motif ${data.motif}`,
+                );
+            })
+            .listenForWhisper("motif", (data) => {
+                if (
+                    !data?.motif ||
+                    String(data.userId) === String(userId) ||
+                    (data.targetUserId &&
+                        String(data.targetUserId) !== String(userId)) ||
+                    !BATIK_MOTIFS.some((motif) => motif.id === data.motif)
+                ) {
+                    return;
+                }
+
+                applyMotifSelection(data.motif, { markUnsaved: true });
+                showToast(
+                    `${data.userName || "Kolaborator"} mengganti motif menjadi ${data.motif}`,
+                );
+            })
+            .listenForWhisper("request_sync", (data) => {
+                if (
+                    !data?.requesterId ||
+                    String(data.requesterId) === String(userId) ||
+                    (data.sourceUserId &&
+                        String(data.sourceUserId) !== String(userId))
+                ) {
+                    return;
+                }
+
+                channel.whisper("motif", {
+                    motif: collabStateRef.current.selectedMotif,
+                    userId,
+                    userName: collabStateRef.current.userName,
+                    targetUserId: data.requesterId,
+                });
+
+                const artwork = getArtworkCanvas();
+                if (!artwork) return;
+
+                const dataUrl = artwork.toDataURL();
+                const totalChunks = Math.ceil(
+                    dataUrl.length / CANVAS_SYNC_CHUNK_SIZE,
+                );
+
+                if (
+                    totalChunks === 0 ||
+                    totalChunks > CANVAS_SYNC_MAX_CHUNKS
+                ) {
+                    console.warn(
+                        "Canvas snapshot is too large to synchronize safely.",
+                    );
+                    return;
+                }
+
+                const syncId = `${loadedDrawingId}-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+                for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                    const start = chunkIndex * CANVAS_SYNC_CHUNK_SIZE;
+                    channel.whisper("sync_state_chunk", {
+                        syncId,
+                        targetUserId: data.requesterId,
+                        chunkIndex,
+                        totalChunks,
+                        chunk: dataUrl.slice(
+                            start,
+                            start + CANVAS_SYNC_CHUNK_SIZE,
+                        ),
+                    });
+                }
+            })
+            .listenForWhisper("sync_state_chunk", (data) => {
+                if (
+                    typeof data?.syncId !== "string" ||
+                    data.syncId.length > 128 ||
+                    String(data.targetUserId) !== String(userId) ||
+                    typeof data.chunk !== "string"
+                ) {
+                    return;
+                }
+
+                const chunkIndex = Number(data.chunkIndex);
+                const totalChunks = Number(data.totalChunks);
+
+                if (
+                    !Number.isInteger(chunkIndex) ||
+                    !Number.isInteger(totalChunks) ||
+                    chunkIndex < 0 ||
+                    totalChunks < 1 ||
+                    totalChunks > CANVAS_SYNC_MAX_CHUNKS ||
+                    chunkIndex >= totalChunks ||
+                    data.chunk.length > CANVAS_SYNC_CHUNK_SIZE
+                ) {
+                    return;
+                }
+
+                let syncState = incomingCanvasSyncsRef.current.get(
+                    data.syncId,
+                );
+
+                if (!syncState) {
+                    const timeoutId = setTimeout(() => {
+                        incomingCanvasSyncsRef.current.delete(data.syncId);
+                    }, CANVAS_SYNC_TIMEOUT_MS);
+
+                    syncState = {
+                        chunks: new Array(totalChunks),
+                        receivedChunks: 0,
+                        timeoutId,
+                    };
+                    incomingCanvasSyncsRef.current.set(data.syncId, syncState);
+                }
+
+                if (
+                    syncState.chunks.length !== totalChunks ||
+                    syncState.chunks[chunkIndex] !== undefined
+                ) {
+                    return;
+                }
+
+                syncState.chunks[chunkIndex] = data.chunk;
+                syncState.receivedChunks += 1;
+
+                if (syncState.receivedChunks === totalChunks) {
+                    clearTimeout(syncState.timeoutId);
+                    incomingCanvasSyncsRef.current.delete(data.syncId);
+                    applySyncedCanvas(syncState.chunks.join(""));
+                }
+            })
+            .listen("CanvasUpdated", (e) => {
+                const accessRulesChanged =
+                    e.action === "share_type_changed" ||
+                    e.action === "collaborator_removed";
+
+                if (accessRulesChanged) {
+                    if (e.action === "share_type_changed") {
+                        setShareType(e.share_type);
+                    }
+
+                    const authorizedCollaboratorIds = Array.isArray(
+                        e.authorized_collaborator_ids,
+                    )
+                        ? e.authorized_collaborator_ids
+                        : [];
+                    const isUnauthorizedForEmailSharing =
+                        e.share_type === "specific_users" &&
+                        !authorizedCollaboratorIds.some(
+                            (authorizedUserId) =>
+                                String(authorizedUserId) === String(userId),
+                        );
+
+                    if (
+                        (e.disconnect_collaborators === true ||
+                            isUnauthorizedForEmailSharing) &&
+                        String(e.user_id) !== String(userId)
+                    ) {
+                        echo.leave(channelName);
+                        canvasChannelRef.current = null;
+                        currentChannelDrawingId.current = null;
+                        setActiveCollaborators([]);
+                        setRemoteCursors({});
+                        router.reload({
+                            replace: true,
+                            preserveState: false,
+                            preserveScroll: false,
+                        });
+
+                        return;
+                    }
+
+                    if (e.action === "share_type_changed") {
+                        showToast(
+                            "Pengaturan izin berbagi diperbarui oleh pemilik",
+                        );
+                    }
+                } else if (e.action === "updated" || e.action === "saved") {
+                    if (e.title && e.title !== collabStateRef.current.projectTitle) {
+                        setProjectTitle(e.title);
+                    }
+                    if (
+                        e.motif &&
+                        BATIK_MOTIFS.some((motif) => motif.id === e.motif)
+                    ) {
+                        applyMotifSelection(e.motif);
+                    }
+                    showToast(
+                        `Kanvas diperbarui oleh ${e.user_name || "kolaborator"}`,
+                    );
+                }
+            });
+
+        return () => {
+            for (const syncState of incomingCanvasSyncsRef.current.values()) {
+                clearTimeout(syncState.timeoutId);
+            }
+            incomingCanvasSyncsRef.current.clear();
+
+            const currentEcho = getEcho();
+            if (currentEcho) {
+                currentEcho.leave(channelName);
+            }
+            if (canvasChannelRef.current === channel) {
+                canvasChannelRef.current = null;
+            }
+            if (currentChannelDrawingId.current === loadedDrawingId) {
+                currentChannelDrawingId.current = null;
+            }
+        };
+    }, [applyMotifSelection, user?.id, loadedDrawingId]);
+
+    // Bersihkan kursor kolaborator yang sudah idle lebih dari 3 detik
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = Date.now();
+            setRemoteCursors((prev) => {
+                let changed = false;
+                const next = {};
+                for (const [id, c] of Object.entries(prev)) {
+                    if (now - c.updatedAt < 3000) {
+                        next[id] = c;
+                    } else {
+                        changed = true;
+                    }
+                }
+                return changed ? next : prev;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     // Malam State UI Helpers
     const getMalamStateInfo = () => {
@@ -1352,17 +2070,20 @@ export default function WastraCanvas() {
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={() => {
+                                    applyMotifSelection(
+                                        detailMotifModal.id,
+                                        {
+                                            broadcastChange: true,
+                                            markUnsaved: true,
+                                        },
+                                    );
+                                    setDetailMotifModal(null);
+
                                     if (detailMotifModal.id === "polos") {
-                                        setSelectedMotif("polos");
-                                        setShowGuide(false);
-                                        setDetailMotifModal(null);
                                         showToast(
                                             `Mode Kanvas Polos (Tanpa Panduan) aktif`,
                                         );
                                     } else {
-                                        setSelectedMotif(detailMotifModal.id);
-                                        setShowGuide(true);
-                                        setDetailMotifModal(null);
                                         showToast(
                                             `Panduan pola ${detailMotifModal.name} diaktifkan`,
                                         );
@@ -1378,7 +2099,7 @@ export default function WastraCanvas() {
             )}
 
             {/* MODAL SIMPAN KARYA */}
-            {showSaveDialog && (
+            {showSaveDialog && isOwner && (
                 <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-[#0B1813] border border-[#2A473A] rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-[#D8C7A5]">
                         <button
@@ -1429,7 +2150,7 @@ export default function WastraCanvas() {
             <header className="h-16 px-6 bg-[#091611] border-b border-[#182C24] flex items-center justify-between shrink-0 z-30">
                 <div className="flex items-center gap-3">
                     <Link href="/" className="flex items-center gap-2 group">
-                        <img width={40} src="logo-wastrakarya.svg" />
+                        <img width={40} src="/logo-wastrakarya.svg" />
                         <span className="font-heading text-2xl font-bold tracking-wide text-[#E2CEAB] group-hover:text-[#F3E5C8] transition-colors">
                             Wastrakarya
                         </span>
@@ -1451,32 +2172,142 @@ export default function WastraCanvas() {
                                 onChange={(e) =>
                                     setProjectTitle(e.target.value)
                                 }
-                                onBlur={() => setIsEditingTitle(false)}
-                                onKeyDown={(e) =>
-                                    e.key === "Enter" &&
-                                    setIsEditingTitle(false)
-                                }
+                                onBlur={async () => {
+                                    setIsEditingTitle(false);
+                                    if (loadedDrawingId && isOwner && user) {
+                                        try {
+                                            await fetch(`/api/user-drawings/${loadedDrawingId}`, {
+                                                method: "PUT",
+                                                headers: {
+                                                    Accept: "application/json",
+                                                    "Content-Type": "application/json",
+                                                    "X-Requested-With": "XMLHttpRequest",
+                                                    ...(getCsrfToken() ? { "X-XSRF-TOKEN": getCsrfToken() } : {}),
+                                                },
+                                                body: JSON.stringify({ title: projectTitle }),
+                                            });
+                                        } catch (_) {}
+                                    }
+                                }}
+                                onKeyDown={async (e) => {
+                                    if (e.key === "Enter") {
+                                        setIsEditingTitle(false);
+                                        if (loadedDrawingId && isOwner && user) {
+                                            try {
+                                                await fetch(`/api/user-drawings/${loadedDrawingId}`, {
+                                                    method: "PUT",
+                                                    headers: {
+                                                        Accept: "application/json",
+                                                        "Content-Type": "application/json",
+                                                        "X-Requested-With": "XMLHttpRequest",
+                                                        ...(getCsrfToken() ? { "X-XSRF-TOKEN": getCsrfToken() } : {}),
+                                                    },
+                                                    body: JSON.stringify({ title: projectTitle }),
+                                                });
+                                            } catch (_) {}
+                                        }
+                                    }
+                                }}
                                 autoFocus
                                 className="bg-[#0B1813] border border-[#CDB988]/40 text-xs text-[#BACDC2] px-1.5 py-0.5 rounded outline-none w-48"
                             />
                         ) : (
                             <span
-                                onClick={() => setIsEditingTitle(true)}
-                                title="Klik untuk mengubah nama karya"
-                                className="text-xs text-[#7E9385] hover:text-[#CDB988] cursor-pointer transition-colors"
+                                onClick={() => {
+                                    if (isOwner) setIsEditingTitle(true);
+                                }}
+                                title={
+                                    isOwner
+                                        ? "Klik untuk mengubah nama karya"
+                                        : "Hanya pemilik yang dapat mengubah nama karya"
+                                }
+                                className={`text-xs text-[#7E9385] transition-colors ${
+                                    isOwner
+                                        ? "hover:text-[#CDB988] cursor-pointer"
+                                        : "cursor-default"
+                                }`}
                             >
                                 {projectTitle}
+                            </span>
+                        )}
+                        {!isOwner && canvasOwner?.name && (
+                            <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                                <Crown size={11} className="text-amber-400" />
+                                Pemilik: {canvasOwner.name}
                             </span>
                         )}
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-xs text-[#7E9385] mr-2">
-                        {hasUnsavedChanges
-                            ? "Perubahan belum disimpan"
-                            : "Perubahan tersimpan"}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* Active Collaborators Online Presence */}
+                    {activeCollaborators.length > 0 && (
+                        <div
+                            className="flex items-center -space-x-2 mr-1 bg-[#0E1E18] px-2.5 py-1.5 rounded-xl border border-[#182C24]"
+                            title={`Sedang mengedit bersama: ${activeCollaborators.map((c) => c.name).join(", ")}`}
+                        >
+                            {activeCollaborators.slice(0, 3).map((c, i) => (
+                                <div
+                                    key={c.id || i}
+                                    className="w-6 h-6 rounded-full bg-[#142920] border-2 border-[#091611] flex items-center justify-center text-[10px] font-bold text-[#CDB988] shadow relative"
+                                    title={`${c.name} (${c.is_owner ? "Pemilik" : "Kolaborator"})`}
+                                >
+                                    {(c.name || "U").charAt(0).toUpperCase()}
+                                    <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-[#091611]"></span>
+                                </div>
+                            ))}
+                            {activeCollaborators.length > 3 && (
+                                <div className="w-6 h-6 rounded-full bg-[#142920] border-2 border-[#091611] flex items-center justify-center text-[9px] font-bold text-[#E2CEAB] shadow">
+                                    +{activeCollaborators.length - 3}
+                                </div>
+                            )}
+                            <span className="ml-3 text-[11px] font-medium text-emerald-400 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                {activeCollaborators.length} aktif
+                            </span>
+                        </div>
+                    )}
+
+                    <span className="text-xs text-[#7E9385] mr-1 hidden sm:inline">
+                        {!isOwner
+                            ? "Hanya pemilik dapat menyimpan"
+                            : hasUnsavedChanges
+                              ? "Perubahan belum disimpan"
+                              : "Perubahan tersimpan"}
                     </span>
+
+                    {/* Tombol Bagikan */}
+                    {isOwner && (
+                        <button
+                            onClick={handleOpenShare}
+                            title={
+                                hasActiveSubscription
+                                    ? "Bagikan kanvas dan kolaborasi real-time"
+                                    : "Fitur kolaborasi (eksklusif pengguna berlangganan)"
+                            }
+                            className="bg-[#142920] hover:bg-[#1E3B2E] border border-[#CDB988]/50 hover:border-[#CDB988] text-[#E2CEAB] font-semibold text-xs px-3.5 py-2.5 rounded-xl shadow-sm transition-all duration-150 flex items-center gap-2 active:scale-95"
+                        >
+                            {hasActiveSubscription ? (
+                                <Share2 size={15} className="text-[#CDB988]" />
+                            ) : (
+                                <Crown size={15} className="text-amber-400" />
+                            )}
+                            <span>Bagikan</span>
+                            {hasActiveSubscription ? (
+                                shareType && shareType !== "private" && (
+                                    <span
+                                        className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+                                        title="Berbagi aktif"
+                                    ></span>
+                                )
+                            ) : (
+                                <span className="text-[10px] text-amber-300 bg-amber-400/15 px-1.5 py-0.5 rounded-md border border-amber-400/30 font-medium">
+                                    Pro
+                                </span>
+                            )}
+                        </button>
+                    )}
+
                     <button
                         onClick={() => {
                             setMalamState("cold");
@@ -1495,13 +2326,15 @@ export default function WastraCanvas() {
                         <HelpCircle size={15} className="text-[#CDB988]" />
                         <span>Bantuan</span>
                     </button>
-                    <button
-                        onClick={() => handleSave()}
-                        className="bg-[#D5BD8A] hover:bg-[#C4AC79] active:scale-95 text-[#0A1612] font-semibold text-sm px-5 py-2 rounded-xl shadow-md transition-all duration-150 flex items-center gap-2"
-                    >
-                        <Save size={15} />
-                        <span>Simpan</span>
-                    </button>
+                    {isOwner && (
+                        <button
+                            onClick={() => handleSave()}
+                            className="bg-[#D5BD8A] hover:bg-[#C4AC79] active:scale-95 text-[#0A1612] font-semibold text-sm px-5 py-2 rounded-xl shadow-md transition-all duration-150 flex items-center gap-2"
+                        >
+                            <Save size={15} />
+                            <span>Simpan</span>
+                        </button>
+                    )}
                     <button
                         onClick={() => handleSave("/mockup")}
                         title="Lihat simulasi 3D desain batik pada kemeja"
@@ -1512,6 +2345,24 @@ export default function WastraCanvas() {
                     </button>
                 </div>
             </header>
+
+            {/* Banner Mode Pratinjau Kolaborasi jika bukan pemilik & belum berlangganan */}
+            {!isOwner && !hasActiveSubscription && (
+                <div className="bg-gradient-to-r from-amber-950/80 to-[#142920] border-b border-amber-500/40 px-6 py-2.5 flex items-center justify-between text-xs text-amber-200 z-20 shrink-0">
+                    <div className="flex items-center gap-2">
+                        <Crown size={15} className="text-amber-400 shrink-0" />
+                        <span>
+                            <strong>Mode Pratinjau Kanvas:</strong> Anda dapat melihat karya ini, namun memerlukan akun dengan paket langganan aktif untuk mengedit bersama secara real-time.
+                        </span>
+                    </div>
+                    <button
+                        onClick={() => setShowSubscriptionModal(true)}
+                        className="bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold px-3 py-1 rounded-lg text-[11px] shadow transition-all active:scale-95 shrink-0 ml-4"
+                    >
+                        Aktifkan Langganan
+                    </button>
+                </div>
+            )}
 
             {/* MAIN WORKSPACE LAYOUT (3 KOLOM) */}
             <div className="flex flex-1 overflow-hidden p-3 gap-3">
@@ -2140,6 +2991,109 @@ export default function WastraCanvas() {
                                 </div>
                             )}
 
+                        {/* Remote Collaborators Cursors + Tool Overlay */}
+                        {Object.entries(remoteCursors).map(([rUserId, rCursor]) => {
+                            const rx = pan.x + rCursor.x * zoom;
+                            const ry = pan.y + rCursor.y * zoom;
+                            if (
+                                rx < -40 ||
+                                rx > canvasWidth + 40 ||
+                                ry < -40 ||
+                                ry > canvasHeight + 40
+                            ) {
+                                return null;
+                            }
+                            const remoteColor = rCursor.color || "#CDB988";
+                            return (
+                                <div
+                                    key={rUserId}
+                                    className="absolute pointer-events-none z-20 transition-all duration-75 select-none"
+                                    style={{
+                                        left: rx,
+                                        top: ry,
+                                    }}
+                                >
+                                    {/* Tool overlay: shows the collaborator's active tool (canting/pencil/eraser) at their cursor */}
+                                    {rCursor.tool === "canting" && (
+                                        <img
+                                            src="/canting.png"
+                                            alt=""
+                                            className="select-none"
+                                            style={{
+                                                position: "absolute",
+                                                left: 0,
+                                                top: 0,
+                                                width: 110,
+                                                height: "auto",
+                                                transform:
+                                                    "translate(0px, -34px)",
+                                                filter: `drop-shadow(0 0 9px ${remoteColor}aa) drop-shadow(0 2px 5px rgba(0,0,0,0.4))`,
+                                            }}
+                                            draggable={false}
+                                        />
+                                    )}
+                                    {rCursor.tool === "pencil" && (
+                                        <img
+                                            src="/pensil.png"
+                                            alt=""
+                                            className="select-none"
+                                            style={{
+                                                position: "absolute",
+                                                left: 0,
+                                                top: 0,
+                                                width: 110,
+                                                height: "auto",
+                                                transform:
+                                                    "translate(-9px, -2px)",
+                                                filter: `drop-shadow(0 0 9px ${remoteColor}aa) drop-shadow(0 2px 5px rgba(0,0,0,0.4))`,
+                                            }}
+                                            draggable={false}
+                                        />
+                                    )}
+                                    {rCursor.tool === "eraser" && (
+                                        <img
+                                            src="/penghapus.png"
+                                            alt=""
+                                            className="select-none"
+                                            style={{
+                                                position: "absolute",
+                                                left: 0,
+                                                top: 0,
+                                                width: 64,
+                                                height: "auto",
+                                                transform:
+                                                    "translate(0, -31px)",
+                                                filter: `drop-shadow(0 0 9px ${remoteColor}aa) drop-shadow(0 2px 5px rgba(0,0,0,0.4))`,
+                                            }}
+                                            draggable={false}
+                                        />
+                                    )}
+                                    <svg
+                                        width="18"
+                                        height="18"
+                                        viewBox="0 0 24 24"
+                                        fill={remoteColor}
+                                        stroke="#091611"
+                                        strokeWidth="1.5"
+                                        className="drop-shadow-lg"
+                                    >
+                                        <path d="M3 3l7 18 3-7 7-3L3 3z" />
+                                    </svg>
+                                    <div
+                                        className="absolute left-3.5 top-2.5 text-[10px] font-semibold text-[#0A1612] px-2 py-0.5 rounded-full shadow-lg whitespace-nowrap border border-[#091611]/30 flex items-center gap-1.5"
+                                        style={{
+                                            backgroundColor: remoteColor,
+                                        }}
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#0A1612]/70"></span>
+                                        <span>
+                                            {rCursor.userName || "Kolaborator"}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+
                         {/* Drawing Time Warning */}
                         {malamState === "drawing" &&
                             drawingTimeLeft <= 10 &&
@@ -2325,15 +3279,15 @@ export default function WastraCanvas() {
                                         <button
                                             key={motif.id}
                                             onClick={() => {
+                                                applyMotifSelection(motif.id, {
+                                                    broadcastChange: true,
+                                                    markUnsaved: true,
+                                                });
                                                 if (motif.id === "polos") {
-                                                    setSelectedMotif("polos");
-                                                    setShowGuide(false);
                                                     showToast(
                                                         `Mode Kanvas Polos (Tanpa Panduan) aktif`,
                                                     );
                                                 } else {
-                                                    setSelectedMotif(motif.id);
-                                                    setShowGuide(true);
                                                     showToast(
                                                         `Panduan pola ${motif.name} diaktifkan`,
                                                     );
@@ -2489,6 +3443,28 @@ export default function WastraCanvas() {
                     </div>
                 </div>
             )}
+
+            {/* Modal Berbagi & Kolaborasi Real-Time */}
+            <ShareModal
+                isOpen={isOwner && shareModalOpen}
+                onClose={() => setShareModalOpen(false)}
+                drawingId={loadedDrawingId}
+                isOwner={isOwner}
+                initialShareType={shareType}
+                shareUrl={
+                    loadedDrawingId
+                        ? `${window.location.origin}/canvas/${loadedDrawingId}`
+                        : ""
+                }
+                onShareUpdated={(newType) => setShareType(newType)}
+                showToast={showToast}
+            />
+
+            {/* Modal Eksklusif Langganan untuk Kolaborasi */}
+            <SubscriptionModal
+                isOpen={showSubscriptionModal}
+                onClose={() => setShowSubscriptionModal(false)}
+            />
         </div>
     );
 }

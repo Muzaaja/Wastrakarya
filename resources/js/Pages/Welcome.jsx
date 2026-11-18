@@ -180,7 +180,7 @@ export default function Welcome({ drawings = [] }) {
                                     title={drawing.title || drawing.motif || 'Desain Wastrakarya'}
                                     lastEdited={drawing.updated_at ? `Diedit ${new Date(drawing.updated_at).toLocaleString('id-ID')}` : undefined}
                                     thumbnailUrl={drawing.data_url || null}
-                                    onClick={() => router.visit(`/canvas?drawing=${drawing.id}`)}
+                                    onClick={() => router.visit(`/canvas/${drawing.id}`)}
                                 />
                             ))}
                         </div>

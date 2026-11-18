@@ -16,6 +16,7 @@ CHANGELOG.md export-ignore
 *.stl filter=lfs diff=lfs merge=lfs -text
 *.bin filter=lfs diff=lfs merge=lfs -text
 *.gltf filter=lfs diff=lfs merge=lfs -text
+*.glb filter=lfs diff=lfs merge=lfs -text
 # Images & Design Assets
 *.psd filter=lfs diff=lfs merge=lfs -text
 *.ai filter=lfs diff=lfs merge=lfs -text

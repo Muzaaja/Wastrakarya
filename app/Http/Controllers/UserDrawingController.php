@@ -2,21 +2,47 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\CanvasUpdated;
+use App\Models\User;
 use App\Models\UserDrawing;
+use App\Models\UserDrawingCollaborator;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class UserDrawingController extends Controller
 {
-    public function index()
+    public function index(): JsonResponse
     {
-        return response()->json(
-            Auth::user()->drawings()->get()
-        );
+        $user = Auth::user();
+
+        // Karya milik pengguna sendiri
+        $ownDrawings = $user->drawings()->get();
+
+        // Karya yang dibagikan khusus ke pengguna ini
+        $sharedDrawings = UserDrawing::query()
+            ->where('user_id', '!=', $user->id)
+            ->where(function ($query) use ($user): void {
+                $query->where('share_type', UserDrawing::SHARE_PUBLIC)
+                    ->orWhere(function ($q) use ($user): void {
+                        $q->where('share_type', UserDrawing::SHARE_SPECIFIC)
+                            ->whereHas('collaborators', function ($sub) use ($user): void {
+                                $sub->where('email', strtolower($user->email));
+                            });
+                    });
+            })
+            ->with('user:id,name,email')
+            ->get();
+
+        return response()->json([
+            'own' => $ownDrawings,
+            'shared' => $sharedDrawings,
+        ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validated = Validator::make($request->all(), [
             'title' => ['required', 'string', 'max:255'],
@@ -25,44 +51,330 @@ class UserDrawingController extends Controller
             'wax_color_name' => ['nullable', 'string', 'max:255'],
             'canting_size' => ['nullable', 'integer'],
             'data_url' => ['required', 'string'],
+            'share_type' => ['nullable', 'string', 'in:private,public,specific_users'],
         ])->validate();
+
+        $validated['share_type'] = $validated['share_type'] ?? UserDrawing::SHARE_PRIVATE;
+        $validated['share_token'] = Str::random(32);
 
         $drawing = Auth::user()->drawings()->create($validated);
 
-        return response()->json($drawing, 201);
+        return response()->json($this->formatDrawingResponse($drawing), 201);
     }
 
-    public function show($id)
+    public function show(string $id): JsonResponse
     {
-        $drawing = Auth::user()->drawings()->findOrFail($id);
+        $drawing = is_numeric($id)
+            ? UserDrawing::with(['collaborators.user:id,name,email', 'user:id,name,email'])->find($id)
+            : UserDrawing::with(['collaborators.user:id,name,email', 'user:id,name,email'])->where('share_token', $id)->first();
 
-        return response()->json($drawing);
+        if (! $drawing) {
+            return response()->json(['message' => 'Karya tidak ditemukan.'], 404);
+        }
+
+        $user = Auth::user();
+        if (! $drawing->canUserAccess($user)) {
+            return response()->json(['message' => 'Anda tidak memiliki akses ke karya ini.'], 403);
+        }
+
+        // Kolaborator yang mengakses kanvas bersama harus memiliki langganan aktif
+        if (! $drawing->isOwner($user) && ! $user->hasActiveSubscription()) {
+            return response()->json([
+                'message' => 'Fitur kolaborasi memerlukan akun dengan paket langganan aktif.',
+                'requires_subscription' => true,
+            ], 403);
+        }
+
+        return response()->json($this->formatDrawingResponse($drawing));
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, string $id): JsonResponse
     {
-        $drawing = Auth::user()->drawings()->findOrFail($id);
+        $drawing = is_numeric($id)
+            ? UserDrawing::find($id)
+            : UserDrawing::where('share_token', $id)->first();
 
-        $validated = Validator::make($request->all(), [
+        if (! $drawing) {
+            return response()->json(['message' => 'Karya tidak ditemukan.'], 404);
+        }
+
+        $user = Auth::user();
+        if (! $drawing->isOwner($user)) {
+            return response()->json(['message' => 'Hanya pemilik kanvas yang dapat menyimpan perubahan.'], 403);
+        }
+
+        $rules = [
             'title' => ['sometimes', 'required', 'string', 'max:255'],
             'motif' => ['nullable', 'string', 'max:255'],
             'wax_color' => ['nullable', 'string', 'max:255'],
             'wax_color_name' => ['nullable', 'string', 'max:255'],
             'canting_size' => ['nullable', 'integer'],
             'data_url' => ['sometimes', 'required', 'string'],
-        ])->validate();
+        ];
+
+        $validated = Validator::make($request->all(), $rules)->validate();
 
         $drawing->update($validated);
 
-        return response()->json($drawing);
+        // Siarkan pembaruan ke kanvas kolaborasi secara realtime
+        broadcast(new CanvasUpdated(
+            drawing: $drawing,
+            userId: $user->id,
+            userName: $user->name,
+            action: 'updated'
+        ))->toOthers();
+
+        return response()->json($this->formatDrawingResponse($drawing));
     }
 
-    public function destroy($id)
+    public function destroy(string $id): JsonResponse
     {
-        $drawing = Auth::user()->drawings()->findOrFail($id);
+        $drawing = is_numeric($id)
+            ? UserDrawing::find($id)
+            : UserDrawing::where('share_token', $id)->first();
+
+        if (! $drawing) {
+            return response()->json(['message' => 'Karya tidak ditemukan.'], 404);
+        }
+
+        $user = Auth::user();
+        if (! $drawing->isOwner($user)) {
+            return response()->json(['message' => 'Hanya pemilik yang dapat menghapus karya ini.'], 403);
+        }
 
         $drawing->delete();
 
         return response()->json(['message' => 'Karya berhasil dihapus.']);
+    }
+
+    public function updateShare(Request $request, string $id): JsonResponse
+    {
+        $drawing = is_numeric($id)
+            ? UserDrawing::find($id)
+            : UserDrawing::where('share_token', $id)->first();
+
+        if (! $drawing) {
+            return response()->json(['message' => 'Karya tidak ditemukan.'], 404);
+        }
+
+        $user = Auth::user();
+        if (! $drawing->isOwner($user)) {
+            return response()->json(['message' => 'Hanya pemilik karya yang dapat mengatur pembagian.'], 403);
+        }
+
+        if (! $user->hasActiveSubscription()) {
+            return response()->json([
+                'message' => 'Fitur kolaborasi dan berbagi kanvas hanya tersedia untuk pengguna dengan paket langganan aktif.',
+                'requires_subscription' => true,
+            ], 403);
+        }
+
+        $validated = Validator::make($request->all(), [
+            'share_type' => ['required', 'string', 'in:private,public,specific_users'],
+        ])->validate();
+
+        $drawing->share_type = $validated['share_type'];
+        $drawing->ensureShareToken();
+        $drawing->save();
+
+        $authorizedCollaboratorIds = $drawing->share_type === UserDrawing::SHARE_SPECIFIC
+            ? $this->authorizedCollaboratorIds($drawing)
+            : [];
+
+        broadcast(new CanvasUpdated(
+            drawing: $drawing,
+            userId: $user->id,
+            userName: $user->name,
+            action: 'share_type_changed',
+            extra: ['share_type' => $drawing->share_type],
+            authorizedCollaboratorIds: $authorizedCollaboratorIds
+        ))->toOthers();
+
+        return response()->json($this->formatDrawingResponse($drawing));
+    }
+
+    public function getCollaborators(string $id): JsonResponse
+    {
+        $drawing = is_numeric($id)
+            ? UserDrawing::with(['collaborators.user:id,name,email', 'user:id,name,email'])->find($id)
+            : UserDrawing::with(['collaborators.user:id,name,email', 'user:id,name,email'])->where('share_token', $id)->first();
+
+        if (! $drawing) {
+            return response()->json(['message' => 'Karya tidak ditemukan.'], 404);
+        }
+
+        $user = Auth::user();
+        if (! $drawing->canUserAccess($user)) {
+            return response()->json(['message' => 'Akses ditolak.'], 403);
+        }
+
+        return response()->json([
+            'drawing_id' => $drawing->id,
+            'is_owner' => $drawing->isOwner($user),
+            'share_type' => $drawing->share_type ?? UserDrawing::SHARE_PRIVATE,
+            'share_token' => $drawing->share_token,
+            'share_url' => url('/canvas/'.$drawing->id),
+            'owner' => [
+                'id' => $drawing->user->id,
+                'name' => $drawing->user->name,
+                'email' => $drawing->user->email,
+            ],
+            'collaborators' => $drawing->collaborators->map(fn (UserDrawingCollaborator $c) => [
+                'id' => $c->id,
+                'email' => $c->email,
+                'user_id' => $c->user_id,
+                'name' => $c->user?->name,
+                'registered' => $c->user_id !== null,
+            ]),
+        ]);
+    }
+
+    public function addCollaborator(Request $request, string $id): JsonResponse
+    {
+        $drawing = is_numeric($id)
+            ? UserDrawing::find($id)
+            : UserDrawing::where('share_token', $id)->first();
+
+        if (! $drawing) {
+            return response()->json(['message' => 'Karya tidak ditemukan.'], 404);
+        }
+
+        $user = Auth::user();
+        if (! $drawing->isOwner($user)) {
+            return response()->json(['message' => 'Hanya pemilik yang dapat menambahkan kolaborator.'], 403);
+        }
+
+        if (! $user->hasActiveSubscription()) {
+            return response()->json([
+                'message' => 'Fitur mengundang kolaborator hanya tersedia untuk pengguna dengan paket langganan aktif.',
+                'requires_subscription' => true,
+            ], 403);
+        }
+
+        $validated = Validator::make($request->all(), [
+            'email' => ['required', 'email', 'max:255'],
+        ])->validate();
+
+        $email = strtolower(trim($validated['email']));
+
+        if ($email === strtolower($user->email)) {
+            return response()->json(['message' => 'Anda adalah pemilik karya ini.'], 422);
+        }
+
+        // Cari user yang sudah terdaftar dengan email ini
+        $invitedUser = User::where('email', $email)->first();
+
+        $collaborator = $drawing->collaborators()->firstOrCreate(
+            ['email' => $email],
+            ['user_id' => $invitedUser?->id]
+        );
+
+        $drawing->ensureShareToken();
+
+        broadcast(new CanvasUpdated(
+            drawing: $drawing,
+            userId: $user->id,
+            userName: $user->name,
+            action: 'collaborator_added',
+            extra: ['email' => $email]
+        ))->toOthers();
+
+        return response()->json([
+            'message' => "Kolaborator {$email} berhasil ditambahkan.",
+            'collaborator' => [
+                'id' => $collaborator->id,
+                'email' => $collaborator->email,
+                'user_id' => $collaborator->user_id,
+                'name' => $invitedUser?->name,
+                'registered' => $invitedUser !== null,
+            ],
+        ]);
+    }
+
+    public function removeCollaborator(string $drawingId, string $collaboratorId): JsonResponse
+    {
+        $drawing = is_numeric($drawingId)
+            ? UserDrawing::find($drawingId)
+            : UserDrawing::where('share_token', $drawingId)->first();
+
+        if (! $drawing) {
+            return response()->json(['message' => 'Karya tidak ditemukan.'], 404);
+        }
+
+        $user = Auth::user();
+        if (! $drawing->isOwner($user)) {
+            return response()->json(['message' => 'Hanya pemilik yang dapat menghapus kolaborator.'], 403);
+        }
+
+        $collaborator = $drawing->collaborators()->where('id', $collaboratorId)->first();
+        if (! $collaborator) {
+            return response()->json(['message' => 'Kolaborator tidak ditemukan.'], 404);
+        }
+
+        $email = $collaborator->email;
+        $collaborator->delete();
+
+        $authorizedCollaboratorIds = $drawing->share_type === UserDrawing::SHARE_SPECIFIC
+            ? $this->authorizedCollaboratorIds($drawing)
+            : [];
+
+        broadcast(new CanvasUpdated(
+            drawing: $drawing,
+            userId: $user->id,
+            userName: $user->name,
+            action: 'collaborator_removed',
+            extra: ['email' => $email],
+            authorizedCollaboratorIds: $authorizedCollaboratorIds
+        ))->toOthers();
+
+        return response()->json(['message' => "Kolaborator {$email} berhasil dihapus."]);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    protected function authorizedCollaboratorIds(UserDrawing $drawing): array
+    {
+        $collaboratorEmails = $drawing->collaborators()->pluck('email');
+
+        if ($collaboratorEmails->isEmpty()) {
+            return [];
+        }
+
+        return User::query()
+            ->whereIn('email', $collaboratorEmails)
+            ->pluck('id')
+            ->map(static fn (int|string $id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function formatDrawingResponse(UserDrawing $drawing): array
+    {
+        $user = Auth::user();
+
+        return [
+            'id' => $drawing->id,
+            'user_id' => $drawing->user_id,
+            'title' => $drawing->title,
+            'motif' => $drawing->motif,
+            'wax_color' => $drawing->wax_color,
+            'wax_color_name' => $drawing->wax_color_name,
+            'canting_size' => $drawing->canting_size,
+            'data_url' => $drawing->data_url,
+            'share_type' => $drawing->share_type ?? UserDrawing::SHARE_PRIVATE,
+            'share_token' => $drawing->share_token,
+            'share_url' => url('/canvas/'.$drawing->id),
+            'is_owner' => $drawing->isOwner($user),
+            'owner' => $drawing->user ? [
+                'id' => $drawing->user->id,
+                'name' => $drawing->user->name,
+            ] : null,
+            'created_at' => $drawing->created_at?->toISOString(),
+            'updated_at' => $drawing->updated_at?->toISOString(),
+        ];
     }
 }

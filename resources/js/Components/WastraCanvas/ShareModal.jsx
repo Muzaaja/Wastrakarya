@@ -12,6 +12,7 @@ import {
     ShieldAlert,
     ExternalLink,
 } from "lucide-react";
+import { getJsonRequestHeaders, getRequestHeaders } from "./http";
 
 export default function ShareModal({
     isOpen,
@@ -32,11 +33,6 @@ export default function ShareModal({
     const [addingEmail, setAddingEmail] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
 
-    const getCsrfToken = () => {
-        const match = document.cookie.match(/(?:^|; )\s*XSRF-TOKEN=([^;]+)/);
-        return match ? decodeURIComponent(match[1]) : "";
-    };
-
     // Sinkronisasi data saat modal dibuka
     useEffect(() => {
         if (!isOpen || !drawingId) return;
@@ -51,13 +47,7 @@ export default function ShareModal({
                 const res = await fetch(
                     `/api/user-drawings/${drawingId}/collaborators`,
                     {
-                        headers: {
-                            Accept: "application/json",
-                            "X-Requested-With": "XMLHttpRequest",
-                            ...(getCsrfToken()
-                                ? { "X-XSRF-TOKEN": getCsrfToken() }
-                                : {}),
-                        },
+                        headers: getRequestHeaders(),
                     },
                 );
                 if (res.ok) {
@@ -105,14 +95,7 @@ export default function ShareModal({
         try {
             const res = await fetch(`/api/user-drawings/${drawingId}/share`, {
                 method: "PUT",
-                headers: {
-                    Accept: "application/json",
-                    "Content-Type": "application/json",
-                    "X-Requested-With": "XMLHttpRequest",
-                    ...(getCsrfToken()
-                        ? { "X-XSRF-TOKEN": getCsrfToken() }
-                        : {}),
-                },
+                headers: getJsonRequestHeaders(),
                 body: JSON.stringify({ share_type: newType }),
             });
 
@@ -154,14 +137,7 @@ export default function ShareModal({
                 `/api/user-drawings/${drawingId}/collaborators`,
                 {
                     method: "POST",
-                    headers: {
-                        Accept: "application/json",
-                        "Content-Type": "application/json",
-                        "X-Requested-With": "XMLHttpRequest",
-                        ...(getCsrfToken()
-                            ? { "X-XSRF-TOKEN": getCsrfToken() }
-                            : {}),
-                    },
+                    headers: getJsonRequestHeaders(),
                     body: JSON.stringify({ email }),
                 },
             );
@@ -196,13 +172,7 @@ export default function ShareModal({
                 `/api/user-drawings/${drawingId}/collaborators/${collabId}`,
                 {
                     method: "DELETE",
-                    headers: {
-                        Accept: "application/json",
-                        "X-Requested-With": "XMLHttpRequest",
-                        ...(getCsrfToken()
-                            ? { "X-XSRF-TOKEN": getCsrfToken() }
-                            : {}),
-                    },
+                    headers: getRequestHeaders(),
                 },
             );
 

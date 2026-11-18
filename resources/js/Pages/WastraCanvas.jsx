@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, {
+    useState,
+    useRef,
+    useEffect,
+    useLayoutEffect,
+    useCallback,
+} from "react";
 import { Head, Link, router, usePage } from "@inertiajs/react";
 import {
     Undo2,
@@ -47,9 +53,82 @@ import getEcho from "@/echo";
 import ShareModal from "@/Components/WastraCanvas/ShareModal";
 import SubscriptionModal from "@/Components/WastraCanvas/SubscriptionModal";
 
+const loadMalamPouring3D = () =>
+    import("@/Components/WastraCanvas/MalamPouring3D");
+const MalamPouring3D = React.lazy(loadMalamPouring3D);
+const loadMalamHardening3D = () =>
+    import("@/Components/WastraCanvas/MalamHardening3D");
+const MalamHardening3D = React.lazy(loadMalamHardening3D);
+
 const CANVAS_SYNC_CHUNK_SIZE = 6000;
 const CANVAS_SYNC_MAX_CHUNKS = 2000;
 const CANVAS_SYNC_TIMEOUT_MS = 15000;
+const DRAWING_DURATION_SECONDS = 90;
+const TUTORIAL_STEPS = [
+    {
+        title: "1. Gunakan Pensil",
+        desc: "Pensil dipakai untuk menggambar garis panduan pada kanvas, yang mana digunakan sebagai acuan untuk nantinya dilukis dengan canting.",
+        target: "tour-pencil",
+    },
+    {
+        title: "2. Pilih Panduan Motif",
+        desc: "Pilih salah satu motif dari Pakem Motif Batik di panel kanan. Panduan titik-titik akan muncul di kanvas sebagai acuan pola.",
+        target: "tour-motif",
+    },
+    {
+        title: "3. Gambar di Kanvas",
+        desc: 'Ikuti panduan motif dengan pensil pada kanvas. Tekan "Selanjutnya" setelah selesai memberi panduan.',
+        target: "tour-canvas",
+    },
+    {
+        title: "4. Gunakan Canting",
+        desc: "Canting dipakai untuk mengaplikasikan lilin malam cair di atas goresan pensil.",
+        target: "tour-canting",
+    },
+    {
+        title: "5. Pilih Warna Malam",
+        desc: "Pilih warna malam yang diinginkan sebelum dipanaskan, karena warna akan terkunci saat malam dipanaskan.",
+        target: "tour-color",
+    },
+    {
+        title: "6. Lelehkan Malam",
+        desc: 'Tekan "Lelehkan Malam" untuk membuka proses persiapan malam.',
+        target: "tour-heat",
+    },
+    {
+        title: "7. Masukkan Malam ke Kuali",
+        desc: "Seret malam ke area bergaris di atas kuali. Anda juga dapat memilih malam lalu menekan Enter atau Spasi.",
+        target: "tour-malam-transfer",
+    },
+    {
+        title: "8. Nyalakan Api",
+        desc: 'Setelah malam berada di dalam kuali, tekan "Nyalakan Api" untuk mulai melelehkannya.',
+        target: "tour-ignite-fire",
+    },
+    {
+        title: "9. Tunggu Malam Meleleh",
+        desc: "Tunggu hingga proses pemanasan mencapai 100%. Tutorial akan berlanjut secara otomatis.",
+        target: "tour-heating-progress",
+    },
+    {
+        title: "10. Isi Canting",
+        desc: "Malam cair sedang dituangkan ke reservoir canting. Tunggu hingga pengisian selesai.",
+        target: "tour-pouring-status",
+    },
+    {
+        title: "11. Tutup Popup",
+        desc: 'Canting sudah siap digunakan. Tekan "Tutup Popup" untuk kembali ke kanvas.',
+        target: "tour-close-heating",
+    },
+    {
+        title: "12. Lukis di Kanvas",
+        desc: "Setelah malam siap, lukis pada kanvas mengikuti goresan pensil. Malam akan mengeras seiring waktu.",
+        target: "tour-canvas",
+    },
+];
+
+const FIRST_POPUP_TUTORIAL_STEP = 6;
+const LAST_POPUP_TUTORIAL_STEP = 10;
 
 export default function WastraCanvas({ initialDrawing = null, canvasId = null }) {
     // Canvas ref & Context
@@ -59,18 +138,28 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
     const canvasBaseLayerRef = useRef(null); // cached cloth, motif guide, and grid
     const canvasBaseLayerKeyRef = useRef("");
     const renderFrameRef = useRef(null);
+    const malamCardRef = useRef(null);
+    const heatingDialogRef = useRef(null);
+    const heatingBackdropRef = useRef(null);
+    const heatingOriginRectRef = useRef(null);
+    const shouldAnimateHeatingOpenRef = useRef(false);
+    const isClosingHeatingOverlayRef = useRef(false);
 
     // Konfigurasi Kanvas
     const canvasWidth = 960;
     const canvasHeight = 960;
 
     // State Peralatan & Lilin Malam - NEW WORKFLOW
-    const [malamState, setMalamState] = useState("cold"); // 'cold', 'preparing', 'heating', 'ready', 'drawing', 'hardened'
+    const [malamState, setMalamState] = useState("cold"); // 'cold', 'preparing', 'heating', 'pouring', 'ready', 'drawing', 'hardened'
     const [heatingProgress, setHeatingProgress] = useState(0); // 0-100 for 5 seconds
     const [isMalamInPot, setIsMalamInPot] = useState(false);
     const [isDraggingMalam, setIsDraggingMalam] = useState(false);
     const [isPotDragOver, setIsPotDragOver] = useState(false);
-    const [drawingTimeLeft, setDrawingTimeLeft] = useState(60); // 60 seconds drawing time
+    const [isMalamPouringFinished, setIsMalamPouringFinished] =
+        useState(false);
+    const [drawingTimeLeft, setDrawingTimeLeft] = useState(
+        DRAWING_DURATION_SECONDS,
+    );
     const [waxColor, setWaxColor] = useState("#CDB988");
     const [waxColorName, setWaxColorName] = useState("Emas tua");
     const cantingSize = 3.5; // Fixed size in world units
@@ -650,11 +739,25 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
     const startHeating = () => {
         if (malamState !== "cold" && malamState !== "hardened") return;
 
+        void loadMalamPouring3D();
+        shouldAnimateHeatingOpenRef.current = false;
+        const malamCardRect = malamCardRef.current?.getBoundingClientRect();
+        if (malamCardRect) {
+            heatingOriginRectRef.current = {
+                left: malamCardRect.left,
+                top: malamCardRect.top,
+                width: malamCardRect.width,
+                height: malamCardRect.height,
+            };
+            shouldAnimateHeatingOpenRef.current = true;
+        }
+
         setMalamState("preparing");
         setHeatingProgress(0);
         setIsMalamInPot(false);
         setIsDraggingMalam(false);
         setIsPotDragOver(false);
+        setIsMalamPouringFinished(false);
         setStatusMessage(
             "Masukkan malam ke dalam kuali, lalu nyalakan api untuk mulai memanaskan.",
         );
@@ -690,6 +793,123 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
         placeMalamInPot();
     };
 
+    const completeMalamPouring = useCallback(() => {
+        setIsMalamPouringFinished(true);
+        setStatusMessage(
+            "Canting terisi malam! Tutup popup untuk kembali ke kanvas.",
+        );
+    }, []);
+
+    const closeHeatingOverlay = () => {
+        if (
+            malamState !== "pouring" ||
+            !isMalamPouringFinished ||
+            isClosingHeatingOverlayRef.current
+        ) {
+            return;
+        }
+
+        isClosingHeatingOverlayRef.current = true;
+
+        const dialog = heatingDialogRef.current;
+        const backdrop = heatingBackdropRef.current;
+        const sourceCard = malamCardRef.current;
+        const destinationRect =
+            heatingOriginRectRef.current ??
+            sourceCard?.getBoundingClientRect();
+        const prefersReducedMotion = window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+        ).matches;
+
+        const finishClosing = () => {
+            if (sourceCard) {
+                sourceCard.style.opacity = "";
+                sourceCard.style.minHeight = "";
+            }
+            if (dialog) {
+                dialog.style.willChange = "auto";
+            }
+            if (backdrop) {
+                backdrop.style.willChange = "auto";
+            }
+
+            isClosingHeatingOverlayRef.current = false;
+            setMalamState("ready");
+            setStatusMessage(
+                'Canting terisi malam! Tekan "Mulai Melukis" untuk mulai membatik.',
+            );
+        };
+
+        if (
+            !dialog ||
+            !backdrop ||
+            !destinationRect ||
+            prefersReducedMotion ||
+            typeof dialog.animate !== "function"
+        ) {
+            finishClosing();
+            return;
+        }
+
+        const dialogRect = dialog.getBoundingClientRect();
+        const destinationCenterX =
+            destinationRect.left + destinationRect.width / 2;
+        const destinationCenterY =
+            destinationRect.top + destinationRect.height / 2;
+        const dialogCenterX = dialogRect.left + dialogRect.width / 2;
+        const dialogCenterY = dialogRect.top + dialogRect.height / 2;
+        const translateX = destinationCenterX - dialogCenterX;
+        const translateY = destinationCenterY - dialogCenterY;
+        const scale = Math.max(
+            0.2,
+            Math.min(
+                0.9,
+                Math.min(
+                    destinationRect.width / dialogRect.width,
+                    destinationRect.height / dialogRect.height,
+                ),
+            ),
+        );
+
+        dialog.style.willChange = "transform, opacity";
+        backdrop.style.willChange = "opacity";
+        if (sourceCard) {
+            sourceCard.style.opacity = "0";
+            sourceCard.style.minHeight = `${destinationRect.height}px`;
+        }
+
+        const dialogAnimation = dialog.animate(
+            [
+                {
+                    transform: "translate3d(0, 0, 0) scale(1)",
+                    opacity: 1,
+                },
+                {
+                    transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+                    opacity: 0.45,
+                },
+            ],
+            {
+                duration: 460,
+                easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+                fill: "forwards",
+            },
+        );
+        const backdropAnimation = backdrop.animate(
+            [{ opacity: 1 }, { opacity: 0 }],
+            {
+                duration: 360,
+                easing: "ease-out",
+                fill: "forwards",
+            },
+        );
+
+        void Promise.allSettled([
+            dialogAnimation.finished,
+            backdropAnimation.finished,
+        ]).then(finishClosing);
+    };
+
     const igniteHeatingFire = () => {
         if (malamState !== "preparing" || !isMalamInPot) return;
 
@@ -699,28 +919,22 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
             "Memanas malam... Tunggu 5 detik hingga lilin meleleh sempurna.",
         );
 
+        let nextProgress = 0;
         heatingTimerRef.current = setInterval(() => {
-            setHeatingProgress((prev) => {
-                const newProgress = prev + 20;
-                if (newProgress >= 100) {
-                    clearInterval(heatingTimerRef.current);
-                    setMalamState("ready");
-                    setHeatingProgress(100);
-                    setStatusMessage(
-                        'Malam siap! Tekan "Mulai Melukis" untuk memasukkan canting.',
-                    );
-                    return 100;
-                }
-                return newProgress;
-            });
+            nextProgress = Math.min(100, nextProgress + 20);
+            setHeatingProgress(nextProgress);
+
+            if (nextProgress < 100) return;
+
+            clearInterval(heatingTimerRef.current);
+            setMalamState("pouring");
+            setStatusMessage("Menuangkan malam cair ke dalam canting...");
         }, 1000);
     };
 
     const startDrawingTimer = () => {
         setMalamState("drawing");
-        setDrawingTimeLeft(90);
-        // setStatusMessage("Melukis dengan canting... Waktu tersisa: 60 detik.");
-        // showToast("Mulai melukis! Waktu 1 menit sebelum malam mengeras.");
+        setDrawingTimeLeft(DRAWING_DURATION_SECONDS);
 
         drawingTimerRef.current = setInterval(() => {
             setDrawingTimeLeft((prev) => {
@@ -744,6 +958,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
 
     const startDrawing = () => {
         if (malamState !== "ready") return;
+        void loadMalamHardening3D();
         startDrawingTimer();
     };
 
@@ -758,7 +973,8 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
         setIsMalamInPot(false);
         setIsDraggingMalam(false);
         setIsPotDragOver(false);
-        setDrawingTimeLeft(60);
+        setIsMalamPouringFinished(false);
+        setDrawingTimeLeft(DRAWING_DURATION_SECONDS);
         setStatusMessage(
             'Malam direset. Pilih warna baru, lalu tekan "Panaskan Malam" untuk memulai.',
         );
@@ -1367,7 +1583,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                 else if (data.isEraser !== undefined)
                     setActiveTool(data.isEraser ? "eraser" : "canting");
                 if (data.malamState === "drawing") {
-                    setDrawingTimeLeft(60);
+                    setDrawingTimeLeft(DRAWING_DURATION_SECONDS);
                     setRestoreDrawing(true);
                 }
                 if (data.dataUrl) {
@@ -1413,7 +1629,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
         }
     }, []);
 
-    // Mulai ulang timer 1 menit saat pulih dari Mockup dalam status melukis
+    // Mulai ulang timer pengerasan saat pulih dari Mockup dalam status melukis
     useEffect(() => {
         if (restoreDrawing && malamState === "drawing") {
             startDrawingTimer();
@@ -1929,6 +2145,19 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                     description: `Silahkan tunggu sampai malam meleleh.`,
                     showColorPicker: false,
                 };
+            case "pouring":
+                return {
+                    label: "Mengisi canting",
+                    color: "text-[#E2B86B]",
+                    bgColor: "bg-[#1A2E20]",
+                    borderColor: "border-[#CDB988]/50",
+                    icon: <Sparkles size={18} className="text-[#E2B86B]" />,
+                    actionLabel: "Menunggu...",
+                    actionColor:
+                        "bg-[#142920] border-[#2A473A] text-[#7E9385] cursor-not-allowed",
+                    description: "Malam cair sedang dituangkan ke canting.",
+                    showColorPicker: false,
+                };
             case "preparing":
                 return {
                     label: "Menyiapkan pemanasan",
@@ -1944,7 +2173,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                 };
             case "ready":
                 return {
-                    label: "Hore!",
+                    label: "Canting siap!",
                     color: "text-[#D5BD8A]",
                     bgColor: "bg-[#142920]",
                     borderColor: "border-[#CDB988]",
@@ -1952,13 +2181,14 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                     actionLabel: "Mulai Melukis",
                     actionColor:
                         "bg-[#D5BD8A] hover:bg-[#C4AC79] text-[#0A1612]",
-                    description: "Malam sudah meleleh, waktunya melukis!",
+                    description:
+                        "Canting telah terisi malam cair, waktunya melukis!",
                     showColorPicker: false,
                     showReheatButton: true,
                 };
             case "drawing":
                 return {
-                    label: `Waktu: ${drawingTimeLeft}s`,
+                    label: `Malam mendingin • ${drawingTimeLeft}s`,
                     color: "text-[#A8D5BA]",
                     bgColor: "bg-[#0F2A1E]",
                     borderColor: "border-[#56C87A]/50",
@@ -1966,13 +2196,14 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                     actionLabel: `Sisa`,
                     actionColor:
                         "bg-[#142920] border-[#56C87A]/50 text-[#A8D5BA] cursor-not-allowed",
-                    description: `Malam akan mengeras sebelum waktu habis.`,
+                    description:
+                        "Kilau dan aliran malam mereda perlahan hingga padat.",
                     showColorPicker: false,
                     showReheatButton: true,
                 };
             case "hardened":
                 return {
-                    label: "Mengeras",
+                    label: "Malam telah padat",
                     color: "text-[#E88D8D]",
                     bgColor: "bg-[#2A1414]",
                     borderColor: "border-[#E88D8D]/50",
@@ -2004,8 +2235,19 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
     };
 
     const malamInfo = getMalamStateInfo();
+    const malamHardeningProgress = Math.min(
+        1,
+        Math.max(
+            0,
+            malamState === "hardened"
+                ? 1
+                : 1 - drawingTimeLeft / DRAWING_DURATION_SECONDS,
+        ),
+    );
     const isPreparingMalam = malamState === "preparing";
-    const isHeatingOverlayOpen = isPreparingMalam || malamState === "heating";
+    const isPouringMalam = malamState === "pouring";
+    const isHeatingOverlayOpen =
+        isPreparingMalam || malamState === "heating" || isPouringMalam;
     const heatingSecondsRemaining = Math.max(
         0,
         Math.ceil((100 - heatingProgress) / 20),
@@ -2017,21 +2259,146 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
               ? "Malam sedang mencair"
               : "Menstabilkan suhu malam";
 
+    useLayoutEffect(() => {
+        if (
+            !isHeatingOverlayOpen ||
+            !shouldAnimateHeatingOpenRef.current
+        ) {
+            return;
+        }
+
+        shouldAnimateHeatingOpenRef.current = false;
+
+        const dialog = heatingDialogRef.current;
+        const backdrop = heatingBackdropRef.current;
+        const sourceCard = malamCardRef.current;
+        const originRect = heatingOriginRectRef.current;
+        const prefersReducedMotion = window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+        ).matches;
+
+        if (
+            !dialog ||
+            !backdrop ||
+            !originRect ||
+            prefersReducedMotion ||
+            typeof dialog.animate !== "function"
+        ) {
+            return;
+        }
+
+        const targetRect = dialog.getBoundingClientRect();
+        const originCenterX = originRect.left + originRect.width / 2;
+        const originCenterY = originRect.top + originRect.height / 2;
+        const targetCenterX = targetRect.left + targetRect.width / 2;
+        const targetCenterY = targetRect.top + targetRect.height / 2;
+        const translateX = originCenterX - targetCenterX;
+        const translateY = originCenterY - targetCenterY;
+        const scale = Math.max(
+            0.2,
+            Math.min(
+                0.9,
+                Math.min(
+                    originRect.width / targetRect.width,
+                    originRect.height / targetRect.height,
+                ),
+            ),
+        );
+
+        dialog.style.willChange = "transform, opacity";
+        backdrop.style.willChange = "opacity";
+        if (sourceCard) {
+            sourceCard.style.opacity = "0";
+            sourceCard.style.minHeight = `${originRect.height}px`;
+        }
+
+        const dialogAnimation = dialog.animate(
+            [
+                {
+                    transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+                    opacity: 0.45,
+                },
+                {
+                    transform: "translate3d(0, 0, 0) scale(1)",
+                    opacity: 1,
+                },
+            ],
+            {
+                duration: 460,
+                easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+                fill: "both",
+            },
+        );
+        const backdropAnimation = backdrop.animate(
+            [{ opacity: 0 }, { opacity: 1 }],
+            {
+                duration: 260,
+                easing: "ease-out",
+                fill: "both",
+            },
+        );
+
+        const clearAnimationHints = () => {
+            dialogAnimation.cancel();
+            backdropAnimation.cancel();
+            dialog.style.willChange = "auto";
+            backdrop.style.willChange = "auto";
+            if (sourceCard) {
+                sourceCard.style.opacity = "";
+                sourceCard.style.minHeight = "";
+            }
+        };
+
+        dialogAnimation.addEventListener("finish", clearAnimationHints, {
+            once: true,
+        });
+
+        return () => {
+            dialogAnimation.removeEventListener(
+                "finish",
+                clearAnimationHints,
+            );
+            clearAnimationHints();
+        };
+    }, [isHeatingOverlayOpen]);
+
     // Auto-advance tutorial on completed actions
     useEffect(() => {
         if (!showTutorial) return;
         if (tutorialStep === 0 && activeTool === "pencil") {
             setTutorialStep(1);
-        } else if (tutorialStep === 1 && selectedMotif !== tutorialInitRef.current.motif) {
+        } else if (
+            tutorialStep === 1 &&
+            selectedMotif !== tutorialInitRef.current.motif
+        ) {
             setTutorialStep(2);
         } else if (tutorialStep === 3 && activeTool === "canting") {
             setTutorialStep(4);
         } else if (tutorialStep === 4 && waxColor !== tutorialInitRef.current.color) {
             setTutorialStep(5);
-        } else if (tutorialStep === 5 && malamState === "ready") {
+        } else if (tutorialStep === 5 && malamState === "preparing") {
             setTutorialStep(6);
+        } else if (tutorialStep === 6 && isMalamInPot) {
+            setTutorialStep(7);
+        } else if (tutorialStep === 7 && malamState === "heating") {
+            setTutorialStep(8);
+        } else if (tutorialStep === 8 && malamState === "pouring") {
+            setTutorialStep(9);
+        } else if (tutorialStep === 9 && isMalamPouringFinished) {
+            setTutorialStep(10);
+        } else if (tutorialStep === 10 && malamState === "ready") {
+            setTutorialStep(11);
         }
-    }, [showTutorial, tutorialStep, activeTool, malamState, selectedMotif, waxColor]);
+    }, [
+        showTutorial,
+        tutorialStep,
+        activeTool,
+        malamState,
+        selectedMotif,
+        waxColor,
+        isMalamInPot,
+        isMalamPouringFinished,
+    ]);
 
     const tutorialInitRef = useRef({ motif: null, color: null });
     useEffect(() => {
@@ -2039,29 +2406,47 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
         tutorialInitRef.current = { motif: selectedMotif, color: waxColor };
     }, [showTutorial]);
 
-    const TUTORIAL_STEPS = [
-        { title: "1. Gunakan Pensil", desc: "Pensil dipakai untuk menggambar garis panduan pada kanvas, yang mana digunakan sebagai acuan untuk nantinya dilukis dengan canting.", target: "tour-pencil" },
-        { title: "2. Pilih Panduan Motif", desc: "Pilih salah satu motif dari Pakem Motif Batik di panel kanan. Panduan titik-titik akan muncul di kanvas sebagai acuan pola.", target: "tour-motif" },
-        { title: "3. Gambar di Kanvas", desc: "Ikuti panduan motif dengan pensil pada kanvas. Tekan \"Selanjutnya\" setelah selesai memberi panduan.", target: "tour-canvas" },
-        { title: "4. Gunakan Canting", desc: "Canting dipakai untuk mengaplikasikan lilin malam cair di atas goresan pensil.", target: "tour-canting" },
-        { title: "5. Pilih Warna Malam", desc: "Pilih warna malam yang diinginkan sebelum dipanaskan, karena warna akan terkunci saat malam dipanaskan.", target: "tour-color" },
-        { title: "6. Panaskan Malam", desc: "Seret malam ke dalam kuali, nyalakan api, lalu tunggu hingga malam meleleh sempurna agar dapat digunakan pada canting.", target: "tour-heat" },
-        { title: "7. Lukis di Kanvas", desc: "Setelah malam siap, lukis pada kanvas mengikuti goresan pensil. Malam akan mengeras seiring waktu.", target: "tour-canvas" },
-    ];
+    const isPopupTutorialStep =
+        tutorialStep >= FIRST_POPUP_TUTORIAL_STEP &&
+        tutorialStep <= LAST_POPUP_TUTORIAL_STEP;
 
     const [spotRect, setSpotRect] = useState(null);
     useEffect(() => {
-        if (!showTutorial) return;
+        if (!showTutorial || isPopupTutorialStep) {
+            setSpotRect(null);
+            return;
+        }
+
         const update = () => {
-            let targetId = TUTORIAL_STEPS[tutorialStep]?.target;
-        if (tutorialStep === 5 && isHeatingOverlayOpen) targetId = "tour-malam-card";
-        const el = document.getElementById(targetId);
-            if (el) setSpotRect(el.getBoundingClientRect());
+            const targetId = TUTORIAL_STEPS[tutorialStep]?.target;
+            const element = document.getElementById(targetId);
+
+            setSpotRect(element?.getBoundingClientRect() ?? null);
         };
+
         update();
         window.addEventListener("resize", update);
         return () => window.removeEventListener("resize", update);
-    }, [showTutorial, tutorialStep, malamState, isHeatingOverlayOpen]);
+    }, [showTutorial, tutorialStep, isPopupTutorialStep]);
+
+    useEffect(() => {
+        if (!showTutorial || !isPopupTutorialStep) return;
+
+        const animationFrame = window.requestAnimationFrame(() => {
+            const targetId = TUTORIAL_STEPS[tutorialStep]?.target;
+            const element = document.getElementById(targetId);
+            const prefersReducedMotion = window.matchMedia(
+                "(prefers-reduced-motion: reduce)",
+            ).matches;
+
+            element?.scrollIntoView({
+                behavior: prefersReducedMotion ? "auto" : "smooth",
+                block: "center",
+            });
+        });
+
+        return () => window.cancelAnimationFrame(animationFrame);
+    }, [showTutorial, tutorialStep, isPopupTutorialStep]);
 
     return (
         <div className="flex flex-col h-screen w-screen bg-[#07130E] text-[#D8C7A5] select-none font-sans overflow-hidden">
@@ -2122,21 +2507,36 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
             {/* FULL-SCREEN PEMANASAN MALAM */}
             {isHeatingOverlayOpen && (
                 <div
-                    className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-[#020705]/90 p-4 backdrop-blur-md sm:p-8"
+                    className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-4 sm:p-8"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="heating-malam-title"
                     aria-describedby="heating-malam-description"
                 >
                     <div
+                        ref={heatingBackdropRef}
+                        className="pointer-events-none fixed inset-0 bg-[#020705]/90"
+                    />
+                    <div
+                        ref={heatingDialogRef}
                         id="tour-malam-card"
-                        className="relative my-auto w-full max-w-2xl overflow-hidden rounded-3xl border border-[#CDB988]/40 bg-[#091611] shadow-[0_30px_100px_rgba(0,0,0,0.75),0_0_80px_rgba(226,139,43,0.08)]"
+                        className="relative z-10 my-auto w-full max-w-2xl transform-gpu overflow-hidden rounded-3xl border border-[#CDB988]/40 bg-[#091611] shadow-[0_30px_100px_rgba(0,0,0,0.75),0_0_80px_rgba(226,139,43,0.08)]"
                     >
                         <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#A95325]/15 to-transparent" />
                         <div className="relative flex flex-col items-center px-5 py-7 text-center sm:px-10 sm:py-9">
-                            <div className="mb-2 flex items-center gap-2 rounded-full border border-[#E2B86B]/25 bg-[#E2B86B]/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#E2B86B]">
+                            <div
+                                className={`mb-2 flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
+                                    isMalamPouringFinished
+                                        ? "border-[#56C87A]/30 bg-[#56C87A]/10 text-[#A8D5BA]"
+                                        : "border-[#E2B86B]/25 bg-[#E2B86B]/10 text-[#E2B86B]"
+                                }`}
+                            >
                                 {isPreparingMalam ? (
                                     <Flame size={13} />
+                                ) : isMalamPouringFinished ? (
+                                    <Check size={13} strokeWidth={3} />
+                                ) : isPouringMalam ? (
+                                    <Sparkles size={13} />
                                 ) : (
                                     <Loader2
                                         size={13}
@@ -2145,6 +2545,10 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                 )}
                                 {isPreparingMalam
                                     ? "Persiapan pemanasan"
+                                    : isMalamPouringFinished
+                                      ? "Proses selesai"
+                                    : isPouringMalam
+                                      ? "Pengisian canting"
                                     : "Proses pemanasan"}
                             </div>
                             <h2
@@ -2153,6 +2557,10 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                             >
                                 {isPreparingMalam
                                     ? "Siapkan Malam"
+                                    : isMalamPouringFinished
+                                      ? "Canting Siap Digunakan"
+                                    : isPouringMalam
+                                      ? "Mengisi Canting"
                                     : "Memanaskan Malam"}
                             </h2>
                             <p
@@ -2161,17 +2569,55 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                             >
                                 {isPreparingMalam
                                     ? "Masukkan malam ke dalam kuali terlebih dahulu, kemudian nyalakan api untuk mulai melelehkannya."
+                                    : isMalamPouringFinished
+                                      ? "Malam telah selesai dituangkan ke dalam reservoir canting. Tutup popup untuk kembali ke kanvas."
+                                    : isPouringMalam
+                                      ? "Malam sudah meleleh sempurna dan sedang dituangkan perlahan ke dalam reservoir canting."
                                     : "Malam sedang dilelehkan perlahan hingga mencapai kekentalan yang tepat untuk mengalir melalui canting."}
                             </p>
 
-                            <div className="mt-5 grid w-full max-w-lg grid-cols-3 gap-2 text-left">
+                            {showTutorial && isPopupTutorialStep && (
+                                <div
+                                    className="mt-4 w-full max-w-lg rounded-2xl border border-[#CDB988]/45 bg-[#0E1E18] p-4 text-left shadow-[0_16px_45px_rgba(0,0,0,0.35)]"
+                                    aria-live="polite"
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#CDB988]">
+                                            Tutorial WastraCanvas
+                                        </span>
+                                        <span className="text-xs text-[#7E9385]">
+                                            {tutorialStep + 1}/
+                                            {TUTORIAL_STEPS.length}
+                                        </span>
+                                    </div>
+                                    <h3 className="mt-2 font-heading text-lg font-bold text-[#E2CEAB]">
+                                        {TUTORIAL_STEPS[tutorialStep].title}
+                                    </h3>
+                                    <p className="mt-1 text-sm leading-relaxed text-[#BACDC2]">
+                                        {TUTORIAL_STEPS[tutorialStep].desc}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowTutorial(false);
+                                            setTutorialStep(0);
+                                        }}
+                                        className="mt-3 text-xs font-medium text-[#7E9385] transition-colors hover:text-[#F5EFEB]"
+                                    >
+                                        Lewati tutorial
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="mt-5 grid w-full max-w-lg grid-cols-4 gap-2 text-left">
                                 {[
                                     {
                                         number: 1,
                                         label: "Masukkan malam",
                                         isComplete:
                                             isMalamInPot ||
-                                            malamState === "heating",
+                                            malamState === "heating" ||
+                                            isPouringMalam,
                                         isActive:
                                             isPreparingMalam && !isMalamInPot,
                                     },
@@ -2179,15 +2625,24 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                         number: 2,
                                         label: "Nyalakan api",
                                         isComplete:
-                                            malamState === "heating",
+                                            malamState === "heating" ||
+                                            isPouringMalam,
                                         isActive:
                                             isPreparingMalam && isMalamInPot,
                                     },
                                     {
                                         number: 3,
                                         label: "Panaskan",
-                                        isComplete: false,
+                                        isComplete: isPouringMalam,
                                         isActive: malamState === "heating",
+                                    },
+                                    {
+                                        number: 4,
+                                        label: "Isi canting",
+                                        isComplete: isMalamPouringFinished,
+                                        isActive:
+                                            isPouringMalam &&
+                                            !isMalamPouringFinished,
                                     },
                                 ].map((step) => (
                                     <div
@@ -2222,7 +2677,48 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                 ))}
                             </div>
 
-                            <div className="relative mt-4 h-[250px] w-full max-w-md select-none sm:h-[270px]">
+                            <div
+                                id="tour-malam-transfer"
+                                className={`relative mt-4 h-[250px] w-full max-w-md select-none rounded-2xl transition-shadow sm:h-[270px] ${
+                                    showTutorial && tutorialStep === 6
+                                        ? "ring-2 ring-[#E2B86B] ring-offset-4 ring-offset-[#091611] shadow-[0_0_35px_rgba(226,184,107,0.22)]"
+                                        : ""
+                                }`}
+                            >
+                                {isPouringMalam && (
+                                    <>
+                                        <React.Suspense
+                                            fallback={
+                                                <div className="absolute inset-0 flex items-center justify-center bg-[#07130E] text-[#CDB988]">
+                                                    <Loader2
+                                                        size={24}
+                                                        className="animate-spin"
+                                                    />
+                                                </div>
+                                            }
+                                        >
+                                            <MalamPouring3D
+                                                waxColor={waxColor}
+                                                onComplete={
+                                                    completeMalamPouring
+                                                }
+                                            />
+                                        </React.Suspense>
+
+                                        <div
+                                            className={`absolute bottom-1 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border bg-[#07130E]/85 px-3 py-1.5 text-[10px] font-semibold ${
+                                                isMalamPouringFinished
+                                                    ? "border-[#56C87A]/30 text-[#A8D5BA]"
+                                                    : "border-[#CDB988]/25 text-[#E2CEAB]"
+                                            }`}
+                                        >
+                                            {isMalamPouringFinished
+                                                ? "Canting telah terisi malam"
+                                                : "Menuangkan malam ke reservoir canting"}
+                                        </div>
+                                    </>
+                                )}
+
                                 {malamState === "heating" && (
                                     <div className="absolute inset-x-10 bottom-2 h-20 rounded-full bg-[#E2452B]/10 blur-3xl" />
                                 )}
@@ -2302,6 +2798,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                         <span className="absolute right-[24%] top-[48%] h-3 w-3 rounded-full border border-white/25" />
                                     </div>
                                 ) : (
+                                    isPreparingMalam &&
                                     isMalamInPot && (
                                         <div
                                             className="absolute left-1/2 top-[66px] z-30 h-20 w-20 -translate-x-1/2 drop-shadow-[0_0_12px_rgba(226,184,107,0.35)]"
@@ -2350,57 +2847,61 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                     </div>
                                 )}
 
-                                <img
-                                    src="/pot.png"
-                                    alt={`Kuali pemanas malam ${waxColorName}`}
-                                    draggable={false}
-                                    className="absolute left-1/2 top-16 z-20 w-[310px] -translate-x-1/2 pointer-events-none sm:w-[360px]"
-                                />
+                                {!isPouringMalam && (
+                                    <img
+                                        src="/pot.png"
+                                        alt={`Kuali pemanas malam ${waxColorName}`}
+                                        draggable={false}
+                                        className="absolute left-1/2 top-16 z-20 w-[310px] -translate-x-1/2 pointer-events-none sm:w-[360px]"
+                                    />
+                                )}
 
                                 {/* Tungku mati atau api menyala */}
-                                {malamState === "heating" ? (
-                                    <div className="absolute bottom-0 left-1/2 z-10 h-[76px] w-[170px] -translate-x-1/2">
-                                        <div
-                                            className="absolute bottom-0 left-1/2 h-10 w-36 rounded-[50%] blur-xl"
-                                            style={{
-                                                background:
-                                                    "radial-gradient(ellipse at center, rgba(255,176,64,0.9) 0%, rgba(226,69,43,0.38) 55%, rgba(226,69,43,0) 76%)",
-                                                animation:
-                                                    "emberGlow 1.4s ease-in-out infinite",
-                                            }}
-                                        />
-                                        <span
-                                            className="flame-shape"
-                                            style={{
-                                                width: 56,
-                                                height: 56,
-                                                marginLeft: -28,
-                                                background:
-                                                    "radial-gradient(circle at 50% 72%, #F6A02A 0%, #E2452B 72%)",
-                                                filter: "blur(1.5px)",
-                                                animationDuration: "0.62s",
-                                            }}
-                                        />
-                                        <span
-                                            className="flame-shape"
-                                            style={{
-                                                width: 36,
-                                                height: 36,
-                                                marginLeft: -18,
-                                                background:
-                                                    "radial-gradient(circle at 50% 72%, #FFF3B0 0%, #F07C1E 78%)",
-                                                animationDuration: "0.45s",
-                                                animationDelay: "0.1s",
-                                            }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="absolute bottom-2 left-1/2 z-10 flex h-10 w-32 -translate-x-1/2 items-center justify-center rounded-[50%] border border-[#2A352F] bg-[#050B08] shadow-inner">
-                                        <Flame
-                                            size={18}
-                                            className="text-[#34433C]"
-                                        />
-                                    </div>
+                                {!isPouringMalam && (
+                                    malamState === "heating" ? (
+                                        <div className="absolute bottom-0 left-1/2 z-10 h-[76px] w-[170px] -translate-x-1/2">
+                                            <div
+                                                className="absolute bottom-0 left-1/2 h-10 w-36 rounded-[50%] blur-xl"
+                                                style={{
+                                                    background:
+                                                        "radial-gradient(ellipse at center, rgba(255,176,64,0.9) 0%, rgba(226,69,43,0.38) 55%, rgba(226,69,43,0) 76%)",
+                                                    animation:
+                                                        "emberGlow 1.4s ease-in-out infinite",
+                                                }}
+                                            />
+                                            <span
+                                                className="flame-shape"
+                                                style={{
+                                                    width: 56,
+                                                    height: 56,
+                                                    marginLeft: -28,
+                                                    background:
+                                                        "radial-gradient(circle at 50% 72%, #F6A02A 0%, #E2452B 72%)",
+                                                    filter: "blur(1.5px)",
+                                                    animationDuration: "0.62s",
+                                                }}
+                                            />
+                                            <span
+                                                className="flame-shape"
+                                                style={{
+                                                    width: 36,
+                                                    height: 36,
+                                                    marginLeft: -18,
+                                                    background:
+                                                        "radial-gradient(circle at 50% 72%, #FFF3B0 0%, #F07C1E 78%)",
+                                                    animationDuration: "0.45s",
+                                                    animationDelay: "0.1s",
+                                                }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="absolute bottom-2 left-1/2 z-10 flex h-10 w-32 -translate-x-1/2 items-center justify-center rounded-[50%] border border-[#2A352F] bg-[#050B08] shadow-inner">
+                                            <Flame
+                                                size={18}
+                                                className="text-[#34433C]"
+                                            />
+                                        </div>
+                                    )
                                 )}
                             </div>
 
@@ -2447,21 +2948,92 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                     </div>
                                     <button
                                         type="button"
+                                        id="tour-ignite-fire"
                                         onClick={igniteHeatingFire}
                                         disabled={!isMalamInPot}
                                         className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-bold transition-all ${
                                             isMalamInPot
                                                 ? "bg-[#D5BD8A] text-[#0A1612] shadow-[0_0_24px_rgba(213,189,138,0.22)] hover:bg-[#E2CEAB] active:scale-[0.98]"
                                                 : "cursor-not-allowed border border-[#182C24] bg-[#0E1E18] text-[#4E6257]"
+                                        } ${
+                                            showTutorial && tutorialStep === 7
+                                                ? "ring-2 ring-[#E2B86B] ring-offset-4 ring-offset-[#091611]"
+                                                : ""
                                         }`}
                                     >
                                         <Flame size={17} />
                                         Nyalakan Api
                                     </button>
                                 </div>
+                            ) : isPouringMalam ? (
+                                <div
+                                    id="tour-pouring-status"
+                                    className={`mt-4 w-full max-w-lg rounded-xl border p-3.5 ${
+                                        isMalamPouringFinished
+                                            ? "border-[#56C87A]/35 bg-[#56C87A]/10"
+                                            : "border-[#CDB988]/30 bg-[#CDB988]/10"
+                                    } ${
+                                        showTutorial && tutorialStep === 9
+                                            ? "ring-2 ring-[#E2B86B] ring-offset-4 ring-offset-[#091611]"
+                                            : ""
+                                    }`}
+                                    aria-live="polite"
+                                    role="status"
+                                >
+                                    <div className="flex items-center gap-3 text-left">
+                                        <span
+                                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#0A1612] ${
+                                                isMalamPouringFinished
+                                                    ? "bg-[#56C87A] shadow-[0_0_18px_rgba(86,200,122,0.25)]"
+                                                    : "bg-[#D5BD8A] shadow-[0_0_18px_rgba(213,189,138,0.3)]"
+                                            }`}
+                                        >
+                                            {isMalamPouringFinished ? (
+                                                <Check
+                                                    size={17}
+                                                    strokeWidth={3}
+                                                />
+                                            ) : (
+                                                <Sparkles size={17} />
+                                            )}
+                                        </span>
+                                        <div className="flex-1">
+                                            <p
+                                                className={`text-sm font-semibold ${
+                                                    isMalamPouringFinished
+                                                        ? "text-[#A8D5BA]"
+                                                        : "text-[#F3E5C8]"
+                                                }`}
+                                            >
+                                                {isMalamPouringFinished
+                                                    ? "Canting siap digunakan"
+                                                    : "Mengisi reservoir canting"}
+                                            </p>
+                                            <p className="mt-0.5 text-xs text-[#9CB0A4]">
+                                                {isMalamPouringFinished
+                                                    ? "Animasi selesai. Tutup popup untuk kembali ke kanvas."
+                                                    : "Malam cair dituangkan perlahan agar canting siap digunakan."}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#07130E]">
+                                        <div
+                                            className={`h-full w-full origin-left rounded-full ${
+                                                isMalamPouringFinished
+                                                    ? "bg-[#56C87A]"
+                                                    : "animate-pulse bg-gradient-to-r from-[#C95F32] via-[#E2B86B] to-[#F3D69A]"
+                                            }`}
+                                        />
+                                    </div>
+                                </div>
                             ) : (
                                 <div
-                                    className="mt-4 w-full max-w-lg"
+                                    id="tour-heating-progress"
+                                    className={`mt-4 w-full max-w-lg rounded-xl transition-shadow ${
+                                        showTutorial && tutorialStep === 8
+                                            ? "ring-2 ring-[#E2B86B] ring-offset-4 ring-offset-[#091611] shadow-[0_0_35px_rgba(226,184,107,0.18)]"
+                                            : ""
+                                    }`}
                                     aria-live="polite"
                                 >
                                     <div className="mb-2 flex items-end justify-between gap-4">
@@ -2498,6 +3070,21 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                         lagi hingga malam siap digunakan.
                                     </p>
                                 </div>
+                            )}
+                            {isMalamPouringFinished && (
+                                <button
+                                    type="button"
+                                    id="tour-close-heating"
+                                    onClick={closeHeatingOverlay}
+                                    className={`mt-4 flex w-full max-w-lg items-center justify-center gap-2 rounded-xl border border-[#D5BD8A] bg-[#D5BD8A] px-5 py-3.5 text-sm font-bold text-[#0A1612] shadow-[0_0_24px_rgba(213,189,138,0.22)] transition-all hover:bg-[#E2CEAB] active:scale-[0.98] ${
+                                        showTutorial && tutorialStep === 10
+                                            ? "ring-2 ring-[#F3E5C8] ring-offset-4 ring-offset-[#091611]"
+                                            : ""
+                                    }`}
+                                >
+                                    <X size={17} />
+                                    Tutup Popup
+                                </button>
                             )}
                         </div>
                     </div>
@@ -2779,7 +3366,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                         onClick={() => {
                             setMalamState("cold");
                             setHeatingProgress(0);
-                            setDrawingTimeLeft(60);
+                            setDrawingTimeLeft(DRAWING_DURATION_SECONDS);
                             tutorialInitRef.current = {
                                 motif: selectedMotif,
                                 color: waxColor,
@@ -2838,6 +3425,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                     <div className="flex flex-col gap-5">
                         {/* Bagian: Status Malam & Aksi Utama */}
                         <div
+                            ref={malamCardRef}
                             className={`bg-[#0E1E18] border border-[#182C24] rounded-xl p-4 ${malamWiggle ? "animate-wiggle border-[#E88D8D] shadow-[0_0_0_6px_rgba(232,141,141,0.35)]" : "border-[#182C24]"}`}
                         >
                             <div className="flex items-center justify-between mb-3">
@@ -2866,15 +3454,38 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                         </div>
                                     </div>
 
-                                    {/* Progress Bar for Drawing Time */}
-                                    {malamState === "drawing" && (
-                                        <div className="h-2 bg-[#08130E] rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-gradient-to-r from-[#56C87A] to-[#A8D5BA] transition-all duration-1000"
-                                                style={{
-                                                    width: `${(drawingTimeLeft / 60) * 100}%`,
-                                                }}
-                                            />
+                                    {(malamState === "drawing" ||
+                                        malamState === "hardened") && (
+                                        <div className="relative mt-3 h-32 overflow-hidden rounded-lg border border-[#CDB988]/20 bg-[#08130E]">
+                                            <React.Suspense
+                                                fallback={
+                                                    <div className="absolute inset-0 animate-pulse bg-[radial-gradient(circle_at_center,rgba(226,184,107,0.2),transparent_62%)]" />
+                                                }
+                                            >
+                                                <MalamHardening3D
+                                                    progress={
+                                                        malamHardeningProgress
+                                                    }
+                                                    waxColor={waxColor}
+                                                />
+                                            </React.Suspense>
+
+                                            <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-full border border-white/10 bg-[#06100C]/75 px-2 py-1 backdrop-blur-sm">
+                                                <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#F0B96A]">
+                                                    Cair
+                                                </span>
+                                                <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                                                    <div
+                                                        className="h-full rounded-full bg-gradient-to-r from-[#F2A85A] via-[#CDB988] to-[#8FA395] transition-[width] duration-1000 ease-linear"
+                                                        style={{
+                                                            width: `${malamHardeningProgress * 100}%`,
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#AFC0B5]">
+                                                    Padat
+                                                </span>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -3734,28 +4345,67 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                 </aside>
             </div>
             {/* TUTORIAL SPOTLIGHT */}
-            {showTutorial && (
-                <div className="fixed inset-0 z-[100] pointer-events-none">
-                    {spotRect && (
-                        <>
-                            {/* Blocker bars around spotlight */}
-                            <div className="fixed top-0 left-0 right-0 pointer-events-auto bg-black/78" style={{ height: Math.max(0, spotRect.top - 8) }} />
-                            <div className="fixed bottom-0 left-0 right-0 pointer-events-auto bg-black/78" style={{ height: Math.max(0, window.innerHeight - (spotRect.bottom + 8)) }} />
-                            <div className="fixed pointer-events-auto bg-black/78" style={{ top: Math.max(0, spotRect.top - 8), left: 0, width: Math.max(0, spotRect.left - 8), height: spotRect.height + 16 }} />
-                            <div className="fixed pointer-events-auto bg-black/78" style={{ top: Math.max(0, spotRect.top - 8), left: spotRect.right + 8, width: Math.max(0, window.innerWidth - (spotRect.right + 8)), height: spotRect.height + 16 }} />
-                            <div
-                                className="absolute rounded-xl ring-2 ring-[#CDB988] pointer-events-none"
-                                style={{
-                                    top: spotRect.top - 8,
-                                    left: spotRect.left - 8,
-                                    width: spotRect.width + 16,
-                                    height: spotRect.height + 16,
-                                    boxShadow: "0 0 0 9999px rgba(0,0,0,0.78)",
-                                }}
-                            />
-                        </>
-                    )}
-                    {!(tutorialStep === 5 && isHeatingOverlayOpen) && (
+            {showTutorial &&
+                !isPopupTutorialStep &&
+                !(tutorialStep === 5 && isHeatingOverlayOpen) && (
+                    <div className="fixed inset-0 z-[100] pointer-events-none">
+                        {spotRect && (
+                            <>
+                                {/* Blocker bars around spotlight */}
+                                <div
+                                    className="fixed top-0 left-0 right-0 pointer-events-auto bg-black/78"
+                                    style={{
+                                        height: Math.max(0, spotRect.top - 8),
+                                    }}
+                                />
+                                <div
+                                    className="fixed bottom-0 left-0 right-0 pointer-events-auto bg-black/78"
+                                    style={{
+                                        height: Math.max(
+                                            0,
+                                            window.innerHeight -
+                                                (spotRect.bottom + 8),
+                                        ),
+                                    }}
+                                />
+                                <div
+                                    className="fixed pointer-events-auto bg-black/78"
+                                    style={{
+                                        top: Math.max(0, spotRect.top - 8),
+                                        left: 0,
+                                        width: Math.max(
+                                            0,
+                                            spotRect.left - 8,
+                                        ),
+                                        height: spotRect.height + 16,
+                                    }}
+                                />
+                                <div
+                                    className="fixed pointer-events-auto bg-black/78"
+                                    style={{
+                                        top: Math.max(0, spotRect.top - 8),
+                                        left: spotRect.right + 8,
+                                        width: Math.max(
+                                            0,
+                                            window.innerWidth -
+                                                (spotRect.right + 8),
+                                        ),
+                                        height: spotRect.height + 16,
+                                    }}
+                                />
+                                <div
+                                    className="absolute rounded-xl ring-2 ring-[#CDB988] pointer-events-none"
+                                    style={{
+                                        top: spotRect.top - 8,
+                                        left: spotRect.left - 8,
+                                        width: spotRect.width + 16,
+                                        height: spotRect.height + 16,
+                                        boxShadow:
+                                            "0 0 0 9999px rgba(0,0,0,0.78)",
+                                    }}
+                                />
+                            </>
+                        )}
                         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[min(560px,90vw)] bg-[#0B1813] border border-[#CDB988]/40 rounded-2xl p-6 shadow-2xl text-[#D8C7A5] pointer-events-auto">
                             <h3 className="font-heading text-xl font-bold text-[#E2CEAB] mb-2">
                                 {TUTORIAL_STEPS[tutorialStep].title}
@@ -3786,7 +4436,7 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                             Selanjutnya
                                         </button>
                                     )}
-                                    {tutorialStep === 6 && (
+                                    {tutorialStep === 11 && (
                                         <button
                                             onClick={() =>
                                                 setShowTutorial(false)
@@ -3799,9 +4449,8 @@ export default function WastraCanvas({ initialDrawing = null, canvasId = null })
                                 </div>
                             </div>
                         </div>
-                    )}
-                </div>
-            )}
+                    </div>
+                )}
 
             {/* Modal Berbagi & Kolaborasi Real-Time */}
             <ShareModal

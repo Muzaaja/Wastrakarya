@@ -4,6 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
+import { ArrowRight } from 'lucide-react';
 
 export default function Register() {
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -102,16 +103,21 @@ export default function Register() {
                     />
                 </div>
 
-                <div className="mt-4 flex items-center justify-end">
+                <div className="mt-8 flex items-center justify-between">
                     <Link
                         href={route('login')}
-                        className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        className="rounded-md text-sm text-white/70 underline hover:text-primary duration-200 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                     >
-                        Already registered?
+                        Sudah Mendaftar?
                     </Link>
 
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Register
+                    <PrimaryButton
+                        className="flex items-center gap-2 font-sans bg-primary text-background hover:bg-transparent border-transparent 
+                        max-md:hidden border-2 hover:border-primary hover:text-primary text-md px-6 py-2.5 rounded-[12px] font-semibold 
+                        transition-all duration-200" disabled={processing}
+                    >
+                        <span>Daftar</span>
+                        <ArrowRight size={20} />
                     </PrimaryButton>
                 </div>
             </form>

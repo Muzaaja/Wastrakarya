@@ -11,7 +11,13 @@ import {
     CANVAS_SYNC_TIMEOUT_MS,
     CANVAS_TILE_SIZE,
     CANVAS_WIDTH,
+    PENCIL_COLOR,
+    shouldTileDrawingForMotif,
 } from "../constants";
+import {
+    clearCanvas,
+    removePencilBeneathWax,
+} from "../canvasPixels";
 import getEcho from "@/echo";
 
 export default function useCanvasCollaboration({
@@ -19,11 +25,15 @@ export default function useCanvasCollaboration({
     canvasChannelRef,
     cantingSize,
     drawRemoteLineBetween,
-    getArtworkCanvas,
+    fabricColor,
+    getPencilCanvas,
+    getWaxCanvas,
+    loadArtworkLayers,
     loadedDrawingId,
     projectTitle,
     renderMainCanvasRef,
     selectedMotif,
+    setFabricColor,
     setProjectTitle,
     setShareType,
     showToast,
@@ -39,6 +49,7 @@ export default function useCanvasCollaboration({
         userName: user?.name ?? null,
         projectTitle,
         cantingSize,
+        fabricColor,
         waxColor,
         selectedMotif,
     });
@@ -49,11 +60,13 @@ export default function useCanvasCollaboration({
             userName: user?.name ?? null,
             projectTitle,
             cantingSize,
+            fabricColor,
             waxColor,
             selectedMotif,
         };
     }, [
         cantingSize,
+        fabricColor,
         projectTitle,
         selectedMotif,
         user?.id,
@@ -99,20 +112,19 @@ export default function useCanvasCollaboration({
         const channel = echo.join(channelName);
         canvasChannelRef.current = channel;
 
-        const applySyncedCanvas = (dataUrl) => {
-            const artwork = getArtworkCanvas();
-            if (!artwork || !dataUrl) {
-                return;
-            }
+        const applySyncedCanvas = (serializedLayers) => {
+            void (async () => {
+                let layers;
 
-            const context = artwork.getContext("2d");
-            const image = new Image();
-            image.onload = () => {
-                context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-                context.drawImage(image, 0, 0);
+                try {
+                    layers = JSON.parse(serializedLayers);
+                } catch (_) {
+                    layers = { compositeDataUrl: serializedLayers };
+                }
+
+                await loadArtworkLayers(layers);
                 renderMainCanvasRef.current();
-            };
-            image.src = dataUrl;
+            })();
         };
 
         channel
@@ -172,6 +184,15 @@ export default function useCanvasCollaboration({
                     data.size || fallbackSize,
                     data.color || fallbackColor || "#CDB988",
                     Boolean(data.erase),
+                    data.tool ||
+                        (data.color === PENCIL_COLOR
+                            ? "pencil"
+                            : "canting"),
+                    typeof data.tiled === "boolean"
+                        ? data.tiled
+                        : shouldTileDrawingForMotif(
+                              collabStateRef.current.selectedMotif,
+                          ),
                 );
             })
             .listenForWhisper("cursor", (data) => {
@@ -196,27 +217,40 @@ export default function useCanvasCollaboration({
                 }));
             })
             .listenForWhisper("clear", (data) => {
-                const artwork = getArtworkCanvas();
-                if (!artwork) {
-                    return;
+                clearCanvas(getPencilCanvas());
+                clearCanvas(getWaxCanvas());
+                if (data?.fabricColor) {
+                    setFabricColor(data.fabricColor);
                 }
-
-                const context = artwork.getContext("2d");
-                context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
                 renderMainCanvasRef.current();
                 showToast(
                     `${data?.userName || "Kolaborator"} membersihkan kanvas`,
                 );
             })
+            .listenForWhisper("fabric-color", (data) => {
+                if (!data?.color) {
+                    return;
+                }
+
+                clearCanvas(getPencilCanvas());
+
+                setFabricColor(data.color);
+                window.requestAnimationFrame(() => {
+                    renderMainCanvasRef.current();
+                });
+                showToast(
+                    `${data?.userName || "Kolaborator"} mewarnai kain`,
+                );
+            })
             .listenForWhisper("trace", (data) => {
-                const artwork = getArtworkCanvas();
-                if (!artwork || !data?.motif) {
+                const waxCanvas = getWaxCanvas();
+                if (!data?.motif) {
                     return;
                 }
 
                 const { cantingSize: fallbackSize, waxColor: fallbackColor } =
                     collabStateRef.current;
-                const context = artwork.getContext("2d");
+                const context = waxCanvas.getContext("2d");
                 const centerX = CANVAS_WIDTH / 2;
                 const centerY = CANVAS_HEIGHT / 2;
                 const scale =
@@ -237,6 +271,7 @@ export default function useCanvasCollaboration({
                     data.size || fallbackSize,
                 );
                 context.restore();
+                removePencilBeneathWax(getPencilCanvas(), waxCanvas);
                 renderMainCanvasRef.current();
                 showToast(
                     `${data?.userName || "Kolaborator"} menjiplak motif ${data.motif}`,
@@ -275,14 +310,12 @@ export default function useCanvasCollaboration({
                     targetUserId: data.requesterId,
                 });
 
-                const artwork = getArtworkCanvas();
-                if (!artwork) {
-                    return;
-                }
-
-                const dataUrl = artwork.toDataURL();
+                const serializedLayers = JSON.stringify({
+                    pencilDataUrl: getPencilCanvas().toDataURL(),
+                    waxDataUrl: getWaxCanvas().toDataURL(),
+                });
                 const totalChunks = Math.ceil(
-                    dataUrl.length / CANVAS_SYNC_CHUNK_SIZE,
+                    serializedLayers.length / CANVAS_SYNC_CHUNK_SIZE,
                 );
 
                 if (
@@ -308,7 +341,7 @@ export default function useCanvasCollaboration({
                         targetUserId: data.requesterId,
                         chunkIndex,
                         totalChunks,
-                        chunk: dataUrl.slice(
+                        chunk: serializedLayers.slice(
                             start,
                             start + CANVAS_SYNC_CHUNK_SIZE,
                         ),
@@ -464,9 +497,12 @@ export default function useCanvasCollaboration({
         applyMotifSelection,
         canvasChannelRef,
         drawRemoteLineBetween,
-        getArtworkCanvas,
+        getPencilCanvas,
+        getWaxCanvas,
+        loadArtworkLayers,
         loadedDrawingId,
         renderMainCanvasRef,
+        setFabricColor,
         setProjectTitle,
         setShareType,
         showToast,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CanvasController;
+use App\Http\Controllers\MockupController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserDrawingController;
 use Illuminate\Foundation\Application;
@@ -33,9 +34,10 @@ Route::middleware('auth')->group(function () {
 Route::get('/canvas', [CanvasController::class, 'index'])->name('canvas');
 Route::get('/canvas/{drawing}', [CanvasController::class, 'show'])->name('canvas.show');
 
-Route::get('/mockup', function () {
-    return Inertia::render('WastraMockup');
-})->name('mockup');
+Route::get('/mockup', [MockupController::class, 'index'])->name('mockup');
+Route::get('/mockup/{drawing}', [MockupController::class, 'show'])
+    ->whereNumber('drawing')
+    ->name('mockup.show');
 
 Route::middleware('auth')->prefix('api/user-drawings')->name('api.user-drawings.')->group(function () {
     Route::get('/', [UserDrawingController::class, 'index']);

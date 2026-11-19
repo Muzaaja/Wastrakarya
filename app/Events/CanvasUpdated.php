@@ -49,6 +49,7 @@ class CanvasUpdated implements ShouldBroadcastNow
             'title' => $this->drawing->title,
             'motif' => $this->drawing->motif,
             'wax_color' => $this->drawing->wax_color,
+            'fabric_color' => $this->drawing->fabric_color,
             'share_type' => $this->drawing->share_type,
             'disconnect_collaborators' => $this->action === 'share_type_changed'
                 && $this->drawing->share_type === UserDrawing::SHARE_PRIVATE,

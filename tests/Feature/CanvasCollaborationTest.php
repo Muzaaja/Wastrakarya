@@ -23,13 +23,20 @@ class CanvasCollaborationTest extends TestCase
             'motif' => 'megamendung',
             'wax_color' => '#CDB988',
             'wax_color_name' => 'Emas tua',
-            'canting_size' => 3,
+            'fabric_color' => '#315B74',
+            'canting_size' => 3.5,
             'data_url' => 'data:image/png;base64,sample',
+            'pencil_data_url' => 'data:image/png;base64,pencil',
+            'wax_data_url' => 'data:image/png;base64,wax',
         ]);
 
         $response->assertCreated()
             ->assertJsonPath('title', 'Batik Megamendung')
             ->assertJsonPath('motif', 'megamendung')
+            ->assertJsonPath('fabric_color', '#315B74')
+            ->assertJsonPath('canting_size', 3.5)
+            ->assertJsonPath('pencil_data_url', 'data:image/png;base64,pencil')
+            ->assertJsonPath('wax_data_url', 'data:image/png;base64,wax')
             ->assertJsonPath('share_type', UserDrawing::SHARE_PRIVATE)
             ->assertJsonPath('is_owner', true);
 
@@ -37,7 +44,102 @@ class CanvasCollaborationTest extends TestCase
             'user_id' => $user->id,
             'title' => 'Batik Megamendung',
             'motif' => 'megamendung',
+            'fabric_color' => '#315B74',
+            'canting_size' => 3.5,
+            'pencil_data_url' => 'data:image/png;base64,pencil',
+            'wax_data_url' => 'data:image/png;base64,wax',
             'share_type' => UserDrawing::SHARE_PRIVATE,
+        ]);
+    }
+
+    public function test_saved_artwork_layers_are_loaded_again(): void
+    {
+        $owner = User::factory()->create();
+        $drawing = UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'pencil_data_url' => null,
+            'wax_data_url' => null,
+        ]);
+
+        $this->actingAs($owner)
+            ->putJson("/api/user-drawings/{$drawing->id}", [
+                'data_url' => 'data:image/png;base64,composite',
+                'pencil_data_url' => 'data:image/png;base64,pencil-layer',
+                'wax_data_url' => 'data:image/png;base64,wax-layer',
+            ])
+            ->assertOk()
+            ->assertJsonPath('pencil_data_url', 'data:image/png;base64,pencil-layer')
+            ->assertJsonPath('wax_data_url', 'data:image/png;base64,wax-layer');
+
+        $this->actingAs($owner)
+            ->get("/canvas/{$drawing->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('WastraCanvas')
+                ->where('initialDrawing.data_url', 'data:image/png;base64,composite')
+                ->where('initialDrawing.pencil_data_url', 'data:image/png;base64,pencil-layer')
+                ->where('initialDrawing.wax_data_url', 'data:image/png;base64,wax-layer'));
+    }
+
+    public function test_drawing_list_omits_editable_layers_until_selected(): void
+    {
+        $owner = User::factory()->create();
+        UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'pencil_data_url' => 'data:image/png;base64,large-pencil-layer',
+            'wax_data_url' => 'data:image/png;base64,large-wax-layer',
+        ]);
+
+        $this->actingAs($owner)
+            ->getJson('/api/user-drawings')
+            ->assertOk()
+            ->assertJsonMissingPath('own.0.pencil_data_url')
+            ->assertJsonMissingPath('own.0.wax_data_url')
+            ->assertJsonPath('own.0.data_url', UserDrawing::query()->value('data_url'));
+    }
+
+    public function test_drawing_list_returns_own_drawings_newest_first(): void
+    {
+        $owner = User::factory()->create();
+        $olderDrawing = UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'updated_at' => now()->subDay(),
+        ]);
+        $newerDrawing = UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($owner)
+            ->getJson('/api/user-drawings')
+            ->assertOk()
+            ->assertJsonPath('own.0.id', $newerDrawing->id)
+            ->assertJsonPath('own.1.id', $olderDrawing->id);
+    }
+
+    public function test_legacy_composite_update_discards_stale_editable_layers(): void
+    {
+        $owner = User::factory()->create();
+        $drawing = UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'pencil_data_url' => 'data:image/png;base64,stale-pencil',
+            'wax_data_url' => 'data:image/png;base64,stale-wax',
+        ]);
+
+        $this->actingAs($owner)
+            ->putJson("/api/user-drawings/{$drawing->id}", [
+                'data_url' => 'data:image/png;base64,legacy-composite-update',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data_url', 'data:image/png;base64,legacy-composite-update')
+            ->assertJsonPath('pencil_data_url', null)
+            ->assertJsonPath('wax_data_url', null);
+
+        $this->assertDatabaseHas('user_drawings', [
+            'id' => $drawing->id,
+            'data_url' => 'data:image/png;base64,legacy-composite-update',
+            'pencil_data_url' => null,
+            'wax_data_url' => null,
         ]);
     }
 
@@ -63,6 +165,50 @@ class CanvasCollaborationTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('WastraCanvas')
                 ->where('initialDrawing.motif', 'parang'));
+    }
+
+    public function test_saved_fabric_color_is_applied_when_drawing_is_loaded_again(): void
+    {
+        $owner = User::factory()->create();
+        $drawing = UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'fabric_color' => '#F5EFEB',
+        ]);
+
+        $this->actingAs($owner)
+            ->putJson("/api/user-drawings/{$drawing->id}", [
+                'fabric_color' => '#315B74',
+            ])
+            ->assertOk()
+            ->assertJsonPath('fabric_color', '#315B74');
+
+        $this->actingAs($owner)
+            ->get("/canvas/{$drawing->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('WastraCanvas')
+                ->where('initialDrawing.fabric_color', '#315B74'));
+    }
+
+    public function test_update_rejects_invalid_fabric_color_with_422(): void
+    {
+        $owner = User::factory()->create();
+        $drawing = UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'fabric_color' => '#F5EFEB',
+        ]);
+
+        $this->actingAs($owner)
+            ->putJson("/api/user-drawings/{$drawing->id}", [
+                'fabric_color' => 'biru nila',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('fabric_color');
+
+        $this->assertDatabaseHas('user_drawings', [
+            'id' => $drawing->id,
+            'fabric_color' => '#F5EFEB',
+        ]);
     }
 
     public function test_private_drawing_cannot_be_accessed_by_other_users(): void

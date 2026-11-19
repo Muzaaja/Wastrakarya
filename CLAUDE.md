@@ -36,7 +36,8 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## Documentation Files
 
-- You must only create documentation files if explicitly requested by the user.
+- Create or update documentation when it is necessary to preserve non-obvious architecture, invariants, operational procedures, or decisions that future maintainers and agents need to understand.
+- Prefer updating an existing, relevant document over creating a new one. Keep documentation concise and scoped; do not add documentation for routine implementation details that are already clear from the code.
 
 === boost rules ===
 

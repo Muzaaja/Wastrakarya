@@ -206,7 +206,7 @@ export default function ShareModal({
                         </div>
                         <div>
                             <h3 className="font-heading font-semibold text-base text-[#E2CEAB]">
-                                Berbagi & Kolaborasi Real-Time
+                                Berbagi & Kolaborasi
                             </h3>
                             <p className="text-xs text-[#7E9385]">
                                 Edit kanvas bersama pengguna lain secara bersamaan
@@ -267,13 +267,8 @@ export default function ShareModal({
                             <div className="flex-1">
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm font-semibold text-[#F5EFEB]">
-                                        (3) Jangan bagikan ke siapa pun (Privat)
+                                        Jangan bagikan ke siapa pun (Privat)
                                     </span>
-                                    {shareType === "private" && (
-                                        <span className="text-xs font-semibold text-[#CDB988] bg-[#CDB988]/10 px-2 py-0.5 rounded-full border border-[#CDB988]/30">
-                                            Aktif
-                                        </span>
-                                    )}
                                 </div>
                                 <p className="text-xs text-[#7E9385] mt-1">
                                     Hanya Anda sendiri yang dapat melihat dan melukis
@@ -303,13 +298,8 @@ export default function ShareModal({
                             <div className="flex-1">
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm font-semibold text-[#F5EFEB]">
-                                        (1) Siapa pun yang memiliki tautan (Publik)
+                                        Siapa pun yang memiliki tautan (Publik)
                                     </span>
-                                    {shareType === "public" && (
-                                        <span className="text-xs font-semibold text-[#CDB988] bg-[#CDB988]/10 px-2 py-0.5 rounded-full border border-[#CDB988]/30">
-                                            Aktif
-                                        </span>
-                                    )}
                                 </div>
                                 <p className="text-xs text-[#7E9385] mt-1">
                                     Semua pengguna terdaftar yang membuka tautan dapat
@@ -339,13 +329,8 @@ export default function ShareModal({
                             <div className="flex-1">
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm font-semibold text-[#F5EFEB]">
-                                        (2) Hanya pengguna tertentu (Email)
+                                        Hanya pengguna tertentu (Email)
                                     </span>
-                                    {shareType === "specific_users" && (
-                                        <span className="text-xs font-semibold text-[#CDB988] bg-[#CDB988]/10 px-2 py-0.5 rounded-full border border-[#CDB988]/30">
-                                            Aktif
-                                        </span>
-                                    )}
                                 </div>
                                 <p className="text-xs text-[#7E9385] mt-1">
                                     Hanya pengguna terdaftar yang Anda tambahkan
@@ -496,10 +481,7 @@ export default function ShareModal({
 
                 {/* Footer Modal */}
                 <div className="px-6 py-3.5 bg-[#091611] border-t border-[#182C24] flex items-center justify-between text-xs text-[#7E9385]">
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        <span>Kolaborasi Realtime Aktif</span>
-                    </div>
+
                     <button
                         onClick={onClose}
                         className="bg-[#142920] hover:bg-[#1E3B2E] border border-[#CDB988]/40 hover:border-[#CDB988] text-[#E2CEAB] font-semibold px-4 py-2 rounded-xl transition-all"

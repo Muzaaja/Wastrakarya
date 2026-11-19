@@ -14,11 +14,9 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
     switch (malamState) {
         case "cold":
             return {
-                label: "",
+                label: "Malam dingin",
                 color: "text-[#7E9385]",
-                bgColor: "bg-[#0E1E18]",
-                borderColor: "border-[#182C24]",
-                icon: <InfoIcon size={18} text="#7E9385" />,
+                icon: <InfoIcon size={18} className="text-[#7E9385]" />,
                 actionLabel: "Lelehkan Malam",
                 actionColor:
                     "bg-[#D5BD8A] hover:bg-[#C4AC79] text-[#0A1612]",
@@ -29,8 +27,6 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
             return {
                 label: `Memanas.. ${heatingProgress}%`,
                 color: "text-[#E2B86B]",
-                bgColor: "bg-[#1A2E20]",
-                borderColor: "border-[#CDB988]/50",
                 icon: (
                     <Loader2
                         size={18}
@@ -46,8 +42,6 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
             return {
                 label: "Mengisi canting",
                 color: "text-[#E2B86B]",
-                bgColor: "bg-[#1A2E20]",
-                borderColor: "border-[#CDB988]/50",
                 icon: <Sparkles size={18} className="text-[#E2B86B]" />,
                 actionLabel: "Menunggu...",
                 actionColor:
@@ -58,8 +52,6 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
             return {
                 label: "Menyiapkan pemanasan",
                 color: "text-[#E2B86B]",
-                bgColor: "bg-[#1A2E20]",
-                borderColor: "border-[#CDB988]/50",
                 icon: <Flame size={18} className="text-[#E2B86B]" />,
                 actionLabel: "Menunggu...",
                 actionColor:
@@ -70,9 +62,7 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
             return {
                 label: "Canting siap!",
                 color: "text-[#D5BD8A]",
-                bgColor: "bg-[#142920]",
-                borderColor: "border-[#CDB988]",
-                icon: <InfoIcon size={18} text="#7E9385" />,
+                icon: <InfoIcon size={18} className="text-[#7E9385]" />,
                 actionLabel: "Mulai Melukis",
                 actionColor:
                     "bg-[#D5BD8A] hover:bg-[#C4AC79] text-[#0A1612]",
@@ -82,24 +72,20 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
             };
         case "drawing":
             return {
-                label: `Malam mendingin • ${drawingTimeLeft}s`,
+                label: `Gunakan sebelum ${drawingTimeLeft} detik`,
                 color: "text-[#A8D5BA]",
-                bgColor: "bg-[#0F2A1E]",
-                borderColor: "border-[#56C87A]/50",
                 icon: <Timer size={18} className="text-[#A8D5BA]" />,
                 actionLabel: "Sisa",
                 actionColor:
                     "bg-[#142920] border-[#56C87A]/50 text-[#A8D5BA] cursor-not-allowed",
                 description:
-                    "Kilau dan aliran malam mereda perlahan hingga padat.",
+                    "Malam akan mengeras dan perlu dilelehkan kembali.",
                 showReheatButton: true,
             };
         case "hardened":
             return {
                 label: "Malam telah padat",
                 color: "text-[#E88D8D]",
-                bgColor: "bg-[#2A1414]",
-                borderColor: "border-[#E88D8D]/50",
                 icon: (
                     <AlertTriangle size={18} className="text-[#E88D8D]" />
                 ),
@@ -114,8 +100,6 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
             return {
                 label: "",
                 color: "",
-                bgColor: "",
-                borderColor: "",
                 icon: null,
                 actionLabel: "",
                 actionColor: "",
@@ -125,123 +109,114 @@ function getMalamStateInfo(malamState, heatingProgress, drawingTimeLeft) {
     }
 }
 
-export function isWaxColorEditable(malamState) {
-    return malamState === "cold" || malamState === "hardened";
-}
-
 export default function MalamStatusCard({ malam, malamWiggle }) {
     const malamInfo = getMalamStateInfo(
         malam.malamState,
         malam.heatingProgress,
         malam.drawingTimeLeft,
     );
+    const isFreshlyMelted =
+        malam.malamState === "pouring" || malam.malamState === "ready";
+    const indicatorProgress =
+        isFreshlyMelted || malam.malamState === "drawing"
+            ? Math.max(0.01, malam.malamHardeningProgress)
+            : malam.malamState === "hardened"
+              ? malam.malamHardeningProgress
+              : 1;
+    const showPrimaryAction = ["cold", "ready", "hardened"].includes(
+        malam.malamState,
+    );
+    const progress =
+        malam.malamState === "heating"
+            ? malam.heatingProgress
+            : isFreshlyMelted
+              ? 1
+              : malam.malamState === "drawing" ||
+                  malam.malamState === "hardened"
+                ? Math.max(1, malam.malamHardeningProgress * 100)
+                : 0;
 
     return (
         <div
             ref={malam.malamCardRef}
-            className={`bg-[#0E1E18] border border-[#182C24] rounded-xl p-4 ${
+            id="tour-malam-card"
+            className={`flex min-h-[8.5rem] min-w-0 items-center gap-3 bg-[#0B1812] px-3 py-2 ${
                 malamWiggle
-                    ? "animate-wiggle border-[#E88D8D] shadow-[0_0_0_6px_rgba(232,141,141,0.35)]"
-                    : "border-[#182C24]"
+                    ? "animate-wiggle bg-[#2A1414] shadow-[inset_5px_0_0_#E88D8D]"
+                    : ""
             }`}
         >
-            <div className="flex items-center justify-between mb-3">
-                <h3 className="font-heading font-semibold text-lg text-[#E2CEAB]">
-                    Malam
-                </h3>
+            <div
+                className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-4 border-[#B5B8AA]/30 bg-[#07110D] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.12),0_5px_14px_rgba(0,0,0,0.38)]"
+                title={`${malam.waxColorName} • ${malamInfo.label}`}
+            >
+                <React.Suspense
+                    fallback={
+                        <div
+                            className="absolute inset-0 animate-pulse"
+                            style={{ backgroundColor: malam.waxColor }}
+                        />
+                    }
+                >
+                    <MalamHardening3D
+                        progress={indicatorProgress}
+                        waxColor={malam.waxColor}
+                    />
+                </React.Suspense>
             </div>
 
-            {!malam.isHeatingOverlayOpen && (
-                <div
-                    id="tour-malam-card"
-                    className={`${malamInfo.bgColor} ${malamInfo.borderColor} rounded-xl p-4 mb-3 transition-all duration-300`}
-                >
-                    <div className="flex items-center gap-3 mb-2">
+            <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                    <span className={`shrink-0 ${malamInfo.color}`}>
                         {malamInfo.icon}
-                        <div className="flex-1">
-                            <p
-                                className={`font-semibold text-sm ${malamInfo.color}`}
-                            >
-                                {malamInfo.label}
-                            </p>
-                            <p className="text-xs text-[#7E9385] mt-0.5">
-                                {malamInfo.description}
-                            </p>
-                        </div>
-                    </div>
+                    </span>
+                    <p
+                        className={`truncate text-xs font-semibold ${malamInfo.color}`}
+                    >
+                        {malamInfo.label}
+                    </p>
+                </div>
+                <p
+                    className="mt-0.5 truncate text-[9px] text-[#71877A]"
+                    title={malamInfo.description}
+                >
+                    {malamInfo.description}
+                </p>
 
-                    {(malam.malamState === "drawing" ||
-                        malam.malamState === "hardened") && (
-                        <div className="relative mt-3 h-32 overflow-hidden rounded-lg border border-[#CDB988]/20 bg-[#08130E]">
-                            <React.Suspense
-                                fallback={
-                                    <div className="absolute inset-0 animate-pulse bg-[radial-gradient(circle_at_center,rgba(226,184,107,0.2),transparent_62%)]" />
-                                }
-                            >
-                                <MalamHardening3D
-                                    progress={malam.malamHardeningProgress}
-                                    waxColor={malam.waxColor}
-                                />
-                            </React.Suspense>
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/10">
+                    <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#F2A85A] via-[#CDB988] to-[#8FA395] transition-[width] duration-500"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
 
-                            <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-full border border-white/10 bg-[#06100C]/75 px-2 py-1 backdrop-blur-sm">
-                                <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#F0B96A]">
-                                    Cair
-                                </span>
-                                <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
-                                    <div
-                                        className="h-full rounded-full bg-gradient-to-r from-[#F2A85A] via-[#CDB988] to-[#8FA395] transition-[width] duration-1000 ease-linear"
-                                        style={{
-                                            width: `${malam.malamHardeningProgress * 100}%`,
-                                        }}
-                                    />
-                                </div>
-                                <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-[#AFC0B5]">
-                                    Padat
-                                </span>
-                            </div>
-                        </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                    {showPrimaryAction && (
+                        <button
+                            type="button"
+                            onClick={malam.handleCantingDip}
+                            id="tour-heat"
+                            className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1 text-[10px] font-semibold transition-all ${malamInfo.actionColor}`}
+                        >
+                            <Flame size={12} />
+                            <span className="truncate">
+                                {malamInfo.actionLabel}
+                            </span>
+                        </button>
+                    )}
+
+                    {malamInfo.showReheatButton && (
+                        <button
+                            type="button"
+                            onClick={malam.reheatForColorChange}
+                            className="flex h-6 w-7 shrink-0 items-center justify-center rounded-lg border border-[#CDB988]/40 bg-[#142920] text-[#D5BD8A] transition-colors hover:border-[#CDB988] hover:bg-[#1A3A2E]"
+                            title="Panaskan ulang untuk mengganti warna"
+                        >
+                            <RotateCcw size={12} />
+                        </button>
                     )}
                 </div>
-            )}
-
-            {malamInfo.actionLabel !== "Menunggu..." &&
-                malamInfo.actionLabel !== "Mulai Melukis" &&
-                malamInfo.actionLabel !== "Sisa" && (
-                    <button
-                        type="button"
-                        onClick={malam.handleCantingDip}
-                        id="tour-heat"
-                        disabled={
-                            malam.malamState === "heating" ||
-                            malam.malamState === "drawing"
-                        }
-                        className={`w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${malamInfo.actionColor}`}
-                    >
-                        {malam.malamState === "heating" && (
-                            <Loader2 size={16} className="animate-spin" />
-                        )}
-                        {malam.malamState === "drawing" && (
-                            <Timer size={16} />
-                        )}
-                        {malam.malamState !== "heating" &&
-                            malam.malamState !== "drawing" && (
-                                <Flame size={16} />
-                            )}
-                        <span>{malamInfo.actionLabel}</span>
-                    </button>
-                )}
-
-            {malamInfo.showReheatButton && (
-                <button
-                    type="button"
-                    onClick={malam.reheatForColorChange}
-                    className="w-full mt-2 px-3 py-2.5 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-2 bg-[#142920] border border-[#CDB988]/50 hover:border-[#CDB988] text-[#D5BD8A] hover:bg-[#1A3A2E]"
-                >
-                    <RotateCcw size={14} />
-                    <span>Panaskan Ulang (Ganti Warna)</span>
-                </button>
-            )}
+            </div>
         </div>
     );
 }

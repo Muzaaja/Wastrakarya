@@ -1,9 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from "../constants";
 
+const MAX_HISTORY_LAYER_UNITS = 30;
+
 export default function useCanvasHistory({
-    getArtworkCanvas,
+    fabricColor,
+    getPencilCanvas,
+    getWaxCanvas,
     renderMainCanvasRef,
+    setFabricColor,
     setHasUnsavedChanges,
 }) {
     const historyStackRef = useRef([]);
@@ -11,82 +16,105 @@ export default function useCanvasHistory({
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 
-    const saveStateToHistory = useCallback(() => {
-        const artwork = getArtworkCanvas();
-        if (!artwork) {
-            return;
-        }
+    const createLayerSnapshot = useCallback(
+        (layers) => {
+            const snapshot = { fabricColor, layers };
 
-        const context = artwork.getContext("2d");
-        const imageData = context.getImageData(
+            if (layers.includes("pencil")) {
+                snapshot.pencilImageData = getPencilCanvas()
+                    .getContext("2d")
+                    .getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            }
+            if (layers.includes("wax")) {
+                snapshot.waxImageData = getWaxCanvas()
+                    .getContext("2d")
+                    .getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            }
+
+            return snapshot;
+        },
+        [fabricColor, getPencilCanvas, getWaxCanvas],
+    );
+
+    const restoreLayerSnapshot = useCallback(
+        (snapshot) => {
+            if (snapshot.pencilImageData) {
+                getPencilCanvas()
+                    .getContext("2d")
+                    .putImageData(snapshot.pencilImageData, 0, 0);
+            }
+            if (snapshot.waxImageData) {
+                getWaxCanvas()
+                    .getContext("2d")
+                    .putImageData(snapshot.waxImageData, 0, 0);
+            }
+        },
+        [getPencilCanvas, getWaxCanvas],
+    );
+
+    const saveStateToHistory = useCallback((layers = ["pencil", "wax"]) => {
+        historyStackRef.current.push(createLayerSnapshot(layers));
+
+        let storedLayerUnits = historyStackRef.current.reduce(
+            (total, snapshot) => total + snapshot.layers.length,
             0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
         );
-        historyStackRef.current.push(imageData);
-
-        if (historyStackRef.current.length > 30) {
-            historyStackRef.current.shift();
+        while (
+            storedLayerUnits > MAX_HISTORY_LAYER_UNITS &&
+            historyStackRef.current.length > 1
+        ) {
+            storedLayerUnits -= historyStackRef.current.shift().layers.length;
         }
 
         redoStackRef.current = [];
         setCanUndo(true);
         setCanRedo(false);
         setHasUnsavedChanges(true);
-    }, [getArtworkCanvas, setHasUnsavedChanges]);
+    }, [createLayerSnapshot, setHasUnsavedChanges]);
 
     const handleUndo = useCallback(() => {
         if (historyStackRef.current.length === 0) {
             return;
         }
 
-        const artwork = getArtworkCanvas();
-        if (!artwork) {
-            return;
-        }
-
-        const context = artwork.getContext("2d");
-        const currentState = context.getImageData(
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
-        );
-        redoStackRef.current.push(currentState);
-
         const previousState = historyStackRef.current.pop();
-        context.putImageData(previousState, 0, 0);
-        renderMainCanvasRef.current();
+        redoStackRef.current.push(
+            createLayerSnapshot(previousState.layers),
+        );
+        restoreLayerSnapshot(previousState);
+        setFabricColor(previousState.fabricColor);
+        window.requestAnimationFrame(() => {
+            renderMainCanvasRef.current();
+        });
         setCanUndo(historyStackRef.current.length > 0);
         setCanRedo(true);
-    }, [getArtworkCanvas, renderMainCanvasRef]);
+    }, [
+        createLayerSnapshot,
+        renderMainCanvasRef,
+        restoreLayerSnapshot,
+        setFabricColor,
+    ]);
 
     const handleRedo = useCallback(() => {
         if (redoStackRef.current.length === 0) {
             return;
         }
 
-        const artwork = getArtworkCanvas();
-        if (!artwork) {
-            return;
-        }
-
-        const context = artwork.getContext("2d");
-        const currentState = context.getImageData(
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT,
-        );
-        historyStackRef.current.push(currentState);
-
         const nextState = redoStackRef.current.pop();
-        context.putImageData(nextState, 0, 0);
-        renderMainCanvasRef.current();
+        historyStackRef.current.push(createLayerSnapshot(nextState.layers));
+        restoreLayerSnapshot(nextState);
+        setFabricColor(nextState.fabricColor);
+        window.requestAnimationFrame(() => {
+            renderMainCanvasRef.current();
+        });
         setCanUndo(true);
         setCanRedo(redoStackRef.current.length > 0);
-    }, [getArtworkCanvas, renderMainCanvasRef]);
+    }, [
+        createLayerSnapshot,
+        renderMainCanvasRef,
+        restoreLayerSnapshot,
+        setFabricColor,
+    ]);
 
     return {
         canRedo,

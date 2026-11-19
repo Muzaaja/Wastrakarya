@@ -101,13 +101,10 @@ export default function Show({ classroom, isAdmin, members = [], drawings = [] }
                     <div className="flex flex-1 flex-col gap-6 w-full">
                         <div className="flex max-sm:flex-col justify-between items-start sm:items-center gap-4">
                             <div>
-                                <div className="flex items-center gap-2 text-2xl font-bold text-white font-heading">
+                                <div className="flex items-center gap-2 text-2xl font-semibold text-primary">
                                     <Palette className="text-primary" size={24} />
                                     <h2>Karya Bersama ({drawings.length})</h2>
                                 </div>
-                                <p className="text-sm text-gray-400 mt-1">
-                                    Buka salah satu karya untuk mulai mendesain batik bersama secara realtime.
-                                </p>
                             </div>
 
                             <button
@@ -164,13 +161,13 @@ export default function Show({ classroom, isAdmin, members = [], drawings = [] }
                                             {member.name.charAt(0).toUpperCase()}
                                         </div>
                                         <div className="flex flex-col min-w-0">
-                                            <span className="font-medium text-white text-sm truncate">{member.name}</span>
-                                            <span className="text-xs text-gray-400 truncate">{member.email}</span>
+                                            <span className="font-medium text-white text-lg truncate">{member.name}</span>
+                                            <span className="text-sm text-gray-400 truncate">{member.email}</span>
                                         </div>
                                     </div>
 
                                     {member.id === classroom.user_id && (
-                                        <span className="text-[10px] bg-primary text-background font-bold px-2 py-0.5 rounded shrink-0">
+                                        <span className="text-sm bg-primary text-background font-bold px-3 py-1 rounded shrink-0">
                                             Admin
                                         </span>
                                     )}

@@ -101,8 +101,8 @@ class UserDrawingController extends Controller
             return response()->json(['message' => 'Anda tidak memiliki akses ke karya ini.'], 403);
         }
 
-        // Kolaborator yang mengakses kanvas bersama harus memiliki langganan aktif
-        if (! $drawing->isOwner($user) && ! $user->hasActiveSubscription()) {
+        // Kolaborator yang mengakses kanvas bersama harus memiliki langganan aktif (kecuali kanvas bersama kelas)
+        if (! $drawing->classroom_id && ! $drawing->isOwner($user) && ! $user->hasActiveSubscription()) {
             return response()->json([
                 'message' => 'Fitur kolaborasi memerlukan akun dengan paket langganan aktif.',
                 'requires_subscription' => true,
@@ -123,8 +123,8 @@ class UserDrawingController extends Controller
         }
 
         $user = Auth::user();
-        if (! $drawing->isOwner($user)) {
-            return response()->json(['message' => 'Hanya pemilik kanvas yang dapat menyimpan perubahan.'], 403);
+        if (! $drawing->canUserEdit($user)) {
+            return response()->json(['message' => 'Anda tidak memiliki izin untuk menyimpan perubahan pada kanvas ini.'], 403);
         }
 
         $rules = [

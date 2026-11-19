@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Models\Classroom;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 #[Fillable(['name', 'email', 'password', 'is_subscribed', 'subscription_expires_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -72,5 +74,10 @@ class User extends Authenticatable
     public function collaborations(): HasMany
     {
         return $this->hasMany(UserDrawingCollaborator::class);
+    }
+
+    public function classrooms(): BelongsToMany
+    {
+        return $this->belongsToMany(Classroom::class)->withTimestamps();
     }
 }

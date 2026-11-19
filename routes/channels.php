@@ -9,12 +9,25 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 });
 
 Broadcast::channel('canvas.{drawingId}', function (User $user, int $drawingId) {
-    $drawing = UserDrawing::find($drawingId);
+    $drawing = UserDrawing::with('classroom.users')->find($drawingId);
     if (! $drawing) {
         return false;
     }
 
-    // Kolaborasi real-time hanya untuk pengguna yang memiliki langganan aktif
+    // Jika ini kanvas bersama kelas, izinkan semua anggota kelas untuk kolaborasi live
+    if ($drawing->classroom_id && $drawing->classroom) {
+        $isClassMember = $drawing->classroom->users->contains('id', $user->id);
+        if ($isClassMember) {
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'is_owner' => $drawing->isOwner($user),
+            ];
+        }
+    }
+
+    // Kolaborasi umum di luar kelas hanya untuk pengguna yang memiliki langganan aktif
     if (! $user->hasActiveSubscription()) {
         return false;
     }

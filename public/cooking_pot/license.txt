@@ -1,0 +1,11 @@
+Model Information:
+* title:	Cooking Pot (Game-Ready)
+* source:	https://sketchfab.com/3d-models/cooking-pot-game-ready-38f0889da545459093cdc411a0e7ae99
+* author:	Vinoskii (https://sketchfab.com/vinoskii)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Cooking Pot (Game-Ready)" (https://sketchfab.com/3d-models/cooking-pot-game-ready-38f0889da545459093cdc411a0e7ae99) by Vinoskii (https://sketchfab.com/vinoskii) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

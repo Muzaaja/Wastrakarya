@@ -1,4 +1,6 @@
 import { AlertTriangle } from "lucide-react";
+import { useCallback, useState } from "react";
+import CanvasClothReveal3D from "./CanvasClothReveal3D";
 
 function LocalToolCursor({
     activeTool,
@@ -195,55 +197,98 @@ export default function CanvasSurface({
     remoteCursors,
     zoom,
 }) {
+    const [isCanvasEntering, setIsCanvasEntering] = useState(true);
     const canShowCanting =
         malamState === "ready" || malamState === "drawing";
+    const renderedCanvasWidth = Math.max(1, Math.round(canvasWidth * zoom));
+    const renderedCanvasHeight = Math.max(
+        1,
+        Math.round(canvasHeight * zoom),
+    );
+
+    const handleCanvasEntranceComplete = useCallback(() => {
+        setIsCanvasEntering(false);
+    }, []);
 
     return (
-        <div className="flex-1 relative overflow-hidden" style={{ touchAction: "none" }}>
-            <canvas
-                ref={canvasRef}
-                width={canvasWidth}
-                height={canvasHeight}
-                className={`block ${
-                    activeTool !== "canting" || canShowCanting
-                        ? "cursor-none"
-                        : "cursor-crosshair"
-                }`}
-                style={{ touchAction: "none" }}
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onPointerLeave={onPointerUp}
-                onPointerOut={onPointerUp}
-                onContextMenu={(event) => event.preventDefault()}
-            />
+        <div
+            data-canvas-viewport
+            role="region"
+            aria-label="Kanvas batik yang dapat digulir"
+            tabIndex={0}
+            className="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#CDB988] [scrollbar-color:#2A473A_#08140F] [scrollbar-width:thin]"
+            style={{ touchAction: "pan-x pan-y" }}
+        >
+            <div
+                className="relative min-h-full min-w-full"
+                style={{
+                    height: renderedCanvasHeight,
+                    width: renderedCanvasWidth,
+                    touchAction: "none",
+                }}
+            >
+                <canvas
+                    ref={canvasRef}
+                    width={renderedCanvasWidth}
+                    height={renderedCanvasHeight}
+                    className={`block ${
+                        activeTool !== "canting" || canShowCanting
+                            ? "cursor-none"
+                            : "cursor-crosshair"
+                    } ${isCanvasEntering ? "opacity-0" : "opacity-100"}`}
+                    style={{
+                        pointerEvents: isCanvasEntering ? "none" : "auto",
+                        touchAction: "none",
+                    }}
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    onPointerCancel={onPointerUp}
+                    onContextMenu={(event) => event.preventDefault()}
+                />
 
-            <LocalToolCursor
-                activeTool={activeTool}
-                cursorAngle={cursorAngle}
-                cursorPos={cursorPos}
-                isPressed={isPressed}
-                malamState={malamState}
-            />
-
-            <RemoteCursors
-                canvasHeight={canvasHeight}
-                canvasWidth={canvasWidth}
-                pan={pan}
-                remoteCursors={remoteCursors}
-                zoom={zoom}
-            />
-
-            {malamState === "drawing" &&
-                drawingTimeLeft <= 10 &&
-                drawingTimeLeft > 0 && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 animate-pulse">
-                        <div className="bg-[#E88D8D]/90 border border-[#E88D8D] rounded-xl px-4 py-2 flex items-center gap-2 text-white text-sm font-medium shadow-xl">
-                            <AlertTriangle size={16} />
-                            <span>Waktu tersisa: {drawingTimeLeft} detik!</span>
-                        </div>
-                    </div>
+                {isCanvasEntering && (
+                    <CanvasClothReveal3D
+                        canvasHeight={canvasHeight}
+                        canvasWidth={canvasWidth}
+                        onComplete={handleCanvasEntranceComplete}
+                        sourceCanvasRef={canvasRef}
+                    />
                 )}
+
+                {!isCanvasEntering && (
+                    <>
+                        <LocalToolCursor
+                            activeTool={activeTool}
+                            cursorAngle={cursorAngle}
+                            cursorPos={cursorPos}
+                            isPressed={isPressed}
+                            malamState={malamState}
+                        />
+
+                        <RemoteCursors
+                            canvasHeight={renderedCanvasHeight}
+                            canvasWidth={renderedCanvasWidth}
+                            pan={pan}
+                            remoteCursors={remoteCursors}
+                            zoom={zoom}
+                        />
+                    </>
+                )}
+
+                {malamState === "drawing" &&
+                    drawingTimeLeft <= 10 &&
+                    drawingTimeLeft > 0 && (
+                        <div className="absolute top-4 left-1/2 z-30 -translate-x-1/2 animate-pulse">
+                            <div className="flex items-center gap-2 rounded-xl border border-[#E88D8D] bg-[#E88D8D]/90 px-4 py-2 text-sm font-medium text-white shadow-xl">
+                                <AlertTriangle size={16} />
+                                <span>
+                                    Waktu tersisa: {drawingTimeLeft} detik!
+                                </span>
+                            </div>
+                        </div>
+                    )}
+            </div>
         </div>
     );
 }

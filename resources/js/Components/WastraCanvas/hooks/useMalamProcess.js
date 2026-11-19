@@ -8,6 +8,7 @@ import {
 import { DRAWING_DURATION_SECONDS } from "../constants";
 import {
     loadMalamHardening3D,
+    loadMalamHeating3D,
     loadMalamPouring3D,
 } from "../MalamScenes";
 
@@ -53,6 +54,7 @@ export default function useMalamProcess({ setStatusMessage }) {
             return;
         }
 
+        void loadMalamHeating3D();
         void loadMalamPouring3D();
         shouldAnimateHeatingOpenRef.current = false;
 
@@ -91,37 +93,10 @@ export default function useMalamProcess({ setStatusMessage }) {
         );
     }, [isMalamInPot, malamState, setStatusMessage]);
 
-    const handleMalamDragStart = useCallback(
-        (event) => {
-            if (malamState !== "preparing" || isMalamInPot) {
-                event.preventDefault();
-                return;
-            }
-
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", "malam");
-            setIsDraggingMalam(true);
-        },
-        [isMalamInPot, malamState],
-    );
-
-    const handleMalamDrop = useCallback(
-        (event) => {
-            event.preventDefault();
-
-            if (event.dataTransfer.getData("text/plain") !== "malam") {
-                return;
-            }
-
-            placeMalamInPot();
-        },
-        [placeMalamInPot],
-    );
-
     const completeMalamPouring = useCallback(() => {
         setIsMalamPouringFinished(true);
         setStatusMessage(
-            "Canting terisi malam! Tutup popup untuk kembali ke kanvas.",
+            "Canting terisi malam!",
         );
     }, [setStatusMessage]);
 
@@ -475,8 +450,6 @@ export default function useMalamProcess({ setStatusMessage }) {
         completeMalamPouring,
         drawingTimeLeft,
         handleCantingDip,
-        handleMalamDragStart,
-        handleMalamDrop,
         heatingBackdropRef,
         heatingDialogRef,
         heatingProgress,

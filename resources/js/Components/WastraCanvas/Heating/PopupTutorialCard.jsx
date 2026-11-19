@@ -11,7 +11,7 @@ export default function PopupTutorialCard({
 
     return (
         <div
-            className="mt-4 w-full max-w-lg rounded-2xl border border-[#CDB988]/45 bg-[#0E1E18] p-4 text-left shadow-[0_16px_45px_rgba(0,0,0,0.35)]"
+            className="mt-4 w-full max-w-xl rounded-2xl border border-[#CDB988]/35 bg-[#0A1913]/85 p-4 text-left shadow-[0_18px_50px_rgba(0,0,0,0.4)] backdrop-blur-md"
             aria-live="polite"
         >
             <div className="flex items-center justify-between gap-3">

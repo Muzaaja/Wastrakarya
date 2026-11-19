@@ -1,42 +1,50 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { 
-    ArrowLeft, 
-    RotateCcw, 
-    Move, 
-    ZoomIn, 
-    Download, 
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { Head, Link, usePage } from "@inertiajs/react";
+import {
+    ArrowLeft,
+    RotateCcw,
+    Move,
+    ZoomIn,
+    Download,
     Sparkles,
     Loader2,
     RectangleHorizontal,
     Shirt,
-} from 'lucide-react';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { createDefaultKawungPicisTexture, createCustomBatikTexture } from '@/Components/WastraMockup/Shirt3DGenerator';
+} from "lucide-react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import {
+    createDefaultKawungPicisTexture,
+    createCustomBatikTexture,
+} from "@/Components/WastraMockup/Shirt3DGenerator";
+import {
+    isStoredDrawingScopedTo,
+    normalizeStoredDrawing,
+    shouldUseStoredDrawing,
+} from "@/Components/WastraCanvas/drawingStorage";
 
 const MOTIF_NAMES = {
-    kawung: 'Kawung',
-    parang: 'Parang',
-    ceplok: 'Ceplok',
-    truntum: 'Truntum',
-    sidomukti: 'Sidomukti',
-    nitik: 'Nitik',
-    polos: 'Polos',
+    kawung: "Kawung",
+    parang: "Parang",
+    ceplok: "Ceplok",
+    truntum: "Truntum",
+    sidomukti: "Sidomukti",
+    nitik: "Nitik",
+    polos: "Polos",
 };
 
 const MOCKUP_MODELS = {
     shirt: {
-        label: 'Baju',
-        description: 'Kemeja lengan panjang',
-        path: '/shirt_mockup/scene.gltf',
+        label: "Baju",
+        description: "Kemeja lengan panjang",
+        path: "/shirt_mockup/scene.gltf",
         rotationY: 0,
     },
     cloth: {
-        label: 'Kain Gantung',
-        description: 'Kain gantung',
-        path: '/cloth_mockup/hanging-cloth.glb',
+        label: "Kain Gantung",
+        description: "Kain gantung",
+        path: "/cloth_mockup/hanging-cloth.glb",
         rotationY: Math.PI,
     },
 };
@@ -47,12 +55,17 @@ const disposeMockupModel = (model) => {
 
         node.geometry?.dispose();
 
-        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        const materials = Array.isArray(node.material)
+            ? node.material
+            : [node.material];
         materials.forEach((material) => material?.dispose());
     });
 };
 
-export default function WastraMockup() {
+export default function WastraMockup({
+    initialDrawing = null,
+    mockupId = null,
+}) {
     const mountRef = useRef(null);
     const rendererRef = useRef(null);
     const sceneRef = useRef(null);
@@ -64,12 +77,12 @@ export default function WastraMockup() {
     // State Parameter 3D
     const [motifScale, setMotifScale] = useState(1.0); // 50% = 0.5, 200% = 2.0
     const motifScaleRef = useRef(motifScale);
-    const [fabricType, setFabricType] = useState('sutra'); // 'sutra' atau 'linen'
+    const [fabricType, setFabricType] = useState("sutra"); // 'sutra' atau 'linen'
     const fabricTypeRef = useRef(fabricType);
-    const [mockupType, setMockupType] = useState('shirt');
+    const [mockupType, setMockupType] = useState("shirt");
     const [isModelLoading, setIsModelLoading] = useState(true);
     const [modelLoadError, setModelLoadError] = useState(false);
-    const [activeControlMode, setActiveControlMode] = useState('orbit'); // 'orbit', 'pan', 'zoom'
+    const [activeControlMode, setActiveControlMode] = useState("orbit"); // 'orbit', 'pan', 'zoom'
     const [toastMessage, setToastMessage] = useState(null);
 
     motifScaleRef.current = motifScale;
@@ -79,8 +92,7 @@ export default function WastraMockup() {
     const [projectTitle, setProjectTitle] = useState(null);
     const [savedDataUrl, setSavedDataUrl] = useState(null);
     const savedDataUrlRef = useRef(null);
-    const [savedDrawing, setSavedDrawing] = useState(null);
-    const [savedLoading, setSavedLoading] = useState(false);
+    const [savedFabricColor, setSavedFabricColor] = useState(null);
 
     const showToast = (msg) => {
         setToastMessage(msg);
@@ -91,73 +103,80 @@ export default function WastraMockup() {
     const { auth } = usePage().props;
     const user = auth?.user ?? null;
 
-    // CSRF token helper untuk panggilan API Laravel dari halaman Inertia
-    const getCsrfToken = useCallback(() => {
-        const match = document.cookie.match(/(?:^|; )\s*XSRF-TOKEN=([^;]+)/);
-        return match ? decodeURIComponent(match[1]) : null;
-    }, []);
-
-    // Ambil simpanan terbaru dari database (berdasarkan User yang login)
-    const fetchLatestDrawing = useCallback(async () => {
-        if (!user) return;
-        setSavedLoading(true);
-        try {
-            const res = await fetch('/api/user-drawings', {
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    ...(getCsrfToken() ? { 'X-XSRF-TOKEN': getCsrfToken() } : {}),
-                },
-            });
-            if (!res.ok) throw new Error('Gagal memuat simpanan karya');
-            const data = await res.json();
-            const drawings = Array.isArray(data) ? data : [];
-            setSavedDrawing(drawings[0] ?? null);
-        } catch (err) {
-            console.error(err);
-            setSavedDrawing(null);
-        } finally {
-            setSavedLoading(false);
-        }
-    }, [user, getCsrfToken]);
-
-    // Muat simpanan terbaru saat user login, atau dari LocalStorage untuk tamu
-    useEffect(() => {
-        if (user) {
-            fetchLatestDrawing();
-        } else {
-            setSavedDrawing(null);
-        }
-    }, [user, fetchLatestDrawing]);
-
     // Terapkan simpanan ke tekstur kemeja dan nama karya
     useEffect(() => {
-        let drawing = null;
-        // LocalStorage sebagai fallback langsung (termasuk user login agar tidak blink kosong)
+        let drawing = initialDrawing;
+
+        // Snapshot hanya menjadi pemulihan ketika cocok dengan kanvas dan pengguna,
+        // serta lebih baru dari data server atau server belum memiliki gambar.
         try {
-            const saved = localStorage.getItem('wastrakarya_studio_save');
-            if (saved) drawing = JSON.parse(saved);
+            const snapshot = sessionStorage.getItem(
+                "wastrakarya_mockup_snapshot",
+            );
+            if (snapshot) {
+                const parsedSnapshot = JSON.parse(snapshot);
+                const isMatchingScope = isStoredDrawingScopedTo(
+                    parsedSnapshot,
+                    {
+                        canvasId: mockupId,
+                        userId: user?.id ?? null,
+                        ownerId: initialDrawing?.user_id ?? null,
+                        allowLegacyGuest: !user,
+                    },
+                );
+
+                if (
+                    isMatchingScope &&
+                    shouldUseStoredDrawing(parsedSnapshot, initialDrawing)
+                ) {
+                    drawing = parsedSnapshot;
+                }
+            }
         } catch (err) {
-            console.error('Error reading saved studio data', err);
+            console.error("Error reading mockup snapshot", err);
         }
 
-        // Jika user login dan ada data dari DB, gunakan data DB (lebih baru)
-        if (user && savedDrawing) {
-            drawing = savedDrawing;
+        // Halaman mockup tamu tetap menggunakan simpanan lokal seperti sebelumnya.
+        if (!drawing && !mockupId && !user) {
+            try {
+                const saved = localStorage.getItem("wastrakarya_studio_save");
+                if (saved) {
+                    const parsedDrawing = JSON.parse(saved);
+                    if (
+                        isStoredDrawingScopedTo(parsedDrawing, {
+                            canvasId: null,
+                            userId: null,
+                            allowLegacyGuest: true,
+                        })
+                    ) {
+                        drawing = parsedDrawing;
+                    }
+                }
+            } catch (err) {
+                console.error("Error reading saved studio data", err);
+            }
         }
 
-        if (drawing && drawing.data_url) {
-            setSavedDataUrl(drawing.data_url);
-            savedDataUrlRef.current = drawing.data_url;
+        const normalizedDrawing = normalizeStoredDrawing(drawing);
+        const drawingDataUrl = normalizedDrawing.dataUrl;
+
+        if (drawingDataUrl) {
+            setSavedDataUrl(drawingDataUrl);
+            savedDataUrlRef.current = drawingDataUrl;
+            setSavedFabricColor(normalizedDrawing.fabricColor);
             setProjectTitle(
-                drawing.title || MOTIF_NAMES[drawing.motif] || drawing.motif || null
+                drawing.title ||
+                    MOTIF_NAMES[drawing.motif] ||
+                    drawing.motif ||
+                    null,
             );
         } else {
             setSavedDataUrl(null);
             savedDataUrlRef.current = null;
+            setSavedFabricColor(null);
             setProjectTitle(null);
         }
-    }, [user, savedDrawing]);
+    }, [initialDrawing, mockupId, user]);
 
     // Inisialisasi Three.js Scene, Camera, Lights, dan tekstur batik
     useEffect(() => {
@@ -171,15 +190,20 @@ export default function WastraMockup() {
         // 2. Camera
         const width = container.clientWidth;
         const height = container.clientHeight;
-        const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
+        const camera = new THREE.PerspectiveCamera(
+            40,
+            width / height,
+            0.1,
+            100,
+        );
         camera.position.set(0, 0.4, 6.2);
         cameraRef.current = camera;
 
         // 3. Renderer dengan Anti-Aliasing dan Shadow Map
-        const renderer = new THREE.WebGLRenderer({ 
-            antialias: true, 
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
             preserveDrawingBuffer: true,
-            alpha: true 
+            alpha: true,
         });
         renderer.setSize(width, height);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -202,11 +226,11 @@ export default function WastraMockup() {
 
         // 5. Pencahayaan Studio Mewah (Dramatic Studio Lights)
         // Ambient Light Hijau Hutan Lembut
-        const ambientLight = new THREE.AmbientLight(0x1B3428, 0.9);
+        const ambientLight = new THREE.AmbientLight(0x1b3428, 0.9);
         scene.add(ambientLight);
 
         // Key Light (Lampu Utama dari Kiri Atas - Warm White)
-        const keyLight = new THREE.DirectionalLight(0xFFF6E8, 2.2);
+        const keyLight = new THREE.DirectionalLight(0xfff6e8, 2.2);
         keyLight.position.set(-3.5, 4.5, 4.0);
         keyLight.castShadow = true;
         keyLight.shadow.mapSize.width = 1024;
@@ -215,33 +239,33 @@ export default function WastraMockup() {
         scene.add(keyLight);
 
         // Fill Light (Lampu Pengisi dari Kanan Depan - Soft Mint / Sage)
-        const fillLight = new THREE.DirectionalLight(0xA4C4B5, 1.1);
+        const fillLight = new THREE.DirectionalLight(0xa4c4b5, 1.1);
         fillLight.position.set(3.5, 2.0, 3.0);
         scene.add(fillLight);
 
         // Rim Light (Lampu Belakang untuk Aksen Siluet Emas Halus)
-        const rimLight = new THREE.DirectionalLight(0xE0CEAB, 1.8);
+        const rimLight = new THREE.DirectionalLight(0xe0ceab, 1.8);
         rimLight.position.set(0, 3.0, -4.5);
         scene.add(rimLight);
 
         // Soft Radial Floor Shadow (Bayangan di Bawah Baju)
         const shadowPlaneGeom = new THREE.PlaneGeometry(5, 5);
-        const shadowCanvas = document.createElement('canvas');
+        const shadowCanvas = document.createElement("canvas");
         shadowCanvas.width = 256;
         shadowCanvas.height = 256;
-        const sCtx = shadowCanvas.getContext('2d');
+        const sCtx = shadowCanvas.getContext("2d");
         const grad = sCtx.createRadialGradient(128, 128, 20, 128, 128, 120);
-        grad.addColorStop(0, 'rgba(0, 0, 0, 0.45)');
-        grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.2)');
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        grad.addColorStop(0, "rgba(0, 0, 0, 0.45)");
+        grad.addColorStop(0.5, "rgba(0, 0, 0, 0.2)");
+        grad.addColorStop(1, "rgba(0, 0, 0, 0)");
         sCtx.fillStyle = grad;
         sCtx.fillRect(0, 0, 256, 256);
         const shadowTex = new THREE.CanvasTexture(shadowCanvas);
-        const shadowMat = new THREE.MeshBasicMaterial({ 
-            map: shadowTex, 
-            transparent: true, 
+        const shadowMat = new THREE.MeshBasicMaterial({
+            map: shadowTex,
+            transparent: true,
             opacity: 0.85,
-            depthWrite: false 
+            depthWrite: false,
         });
         const shadowMesh = new THREE.Mesh(shadowPlaneGeom, shadowMat);
         shadowMesh.rotation.x = -Math.PI / 2;
@@ -263,7 +287,10 @@ export default function WastraMockup() {
             controls.update();
 
             // Rotasi mengambang santai jika kursor tidak sedang berinteraksi
-            if (mockupModelRef.current && (!controls.state || controls.state === -1)) {
+            if (
+                mockupModelRef.current &&
+                (!controls.state || controls.state === -1)
+            ) {
                 mockupModelRef.current.rotation.y += 0.0015;
             }
 
@@ -280,13 +307,16 @@ export default function WastraMockup() {
             camera.updateProjectionMatrix();
             renderer.setSize(newW, newH);
         };
-        window.addEventListener('resize', handleResize);
+        window.addEventListener("resize", handleResize);
 
         // Cleanup saat komponen unmount
         return () => {
-            window.removeEventListener('resize', handleResize);
+            window.removeEventListener("resize", handleResize);
             cancelAnimationFrame(animationFrameId);
-            if (renderer.domElement && container.contains(renderer.domElement)) {
+            if (
+                renderer.domElement &&
+                container.contains(renderer.domElement)
+            ) {
                 container.removeChild(renderer.domElement);
             }
             if (mockupModelRef.current) {
@@ -333,10 +363,10 @@ export default function WastraMockup() {
                 mockupObject.position.set(
                     -center.x * normalizedScale,
                     -center.y * normalizedScale + 0.1,
-                    -center.z * normalizedScale
+                    -center.z * normalizedScale,
                 );
 
-                const isSilk = fabricTypeRef.current === 'sutra';
+                const isSilk = fabricTypeRef.current === "sutra";
                 mockupObject.traverse((node) => {
                     if (!node.isMesh) return;
 
@@ -368,7 +398,7 @@ export default function WastraMockup() {
                 console.error(`GLTF load error for ${mockupType}:`, error);
                 setIsModelLoading(false);
                 setModelLoadError(true);
-            }
+            },
         );
 
         return () => {
@@ -381,33 +411,37 @@ export default function WastraMockup() {
         if (!savedDataUrl) return;
 
         let isCancelled = false;
-        createCustomBatikTexture(savedDataUrl, (customTex) => {
-            if (isCancelled) {
-                customTex.dispose();
-                return;
-            }
-
-            customTex.wrapS = THREE.RepeatWrapping;
-            customTex.wrapT = THREE.RepeatWrapping;
-            const baseRep = 2 * motifScaleRef.current;
-            customTex.repeat.set(baseRep, baseRep);
-            customTex.needsUpdate = true;
-
-            const previousTexture = textureRef.current;
-            textureRef.current = customTex;
-            mockupModelRef.current?.traverse((node) => {
-                if (node.isMesh) {
-                    node.material.map = customTex;
-                    node.material.needsUpdate = true;
+        createCustomBatikTexture(
+            savedDataUrl,
+            savedFabricColor,
+            (customTex) => {
+                if (isCancelled) {
+                    customTex.dispose();
+                    return;
                 }
-            });
-            previousTexture?.dispose();
-        });
+
+                customTex.wrapS = THREE.RepeatWrapping;
+                customTex.wrapT = THREE.RepeatWrapping;
+                const baseRep = 2 * motifScaleRef.current;
+                customTex.repeat.set(baseRep, baseRep);
+                customTex.needsUpdate = true;
+
+                const previousTexture = textureRef.current;
+                textureRef.current = customTex;
+                mockupModelRef.current?.traverse((node) => {
+                    if (node.isMesh) {
+                        node.material.map = customTex;
+                        node.material.needsUpdate = true;
+                    }
+                });
+                previousTexture?.dispose();
+            },
+        );
 
         return () => {
             isCancelled = true;
         };
-    }, [savedDataUrl]);
+    }, [savedDataUrl, savedFabricColor]);
 
     // Update Motif Scale (50% - 200%)
     useEffect(() => {
@@ -430,7 +464,7 @@ export default function WastraMockup() {
         if (!mockupModelRef.current) return;
         mockupModelRef.current.traverse((node) => {
             if (node.isMesh) {
-                if (fabricType === 'sutra') {
+                if (fabricType === "sutra") {
                     // Sutra: Halus, berkilau lembut, reflektif
                     node.material.roughness = 0.35;
                     node.material.metalness = 0.1;
@@ -450,15 +484,15 @@ export default function WastraMockup() {
         const controls = controlsRef.current;
         if (!controls) return;
 
-        if (mode === 'orbit') {
+        if (mode === "orbit") {
             controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
-            showToast('Mode: Rotasi Bebas (Orbit)');
-        } else if (mode === 'pan') {
+            showToast("Mode: Rotasi Bebas (Orbit)");
+        } else if (mode === "pan") {
             controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
-            showToast('Mode: Geser Tampilan (Pan)');
-        } else if (mode === 'zoom') {
+            showToast("Mode: Geser Tampilan (Pan)");
+        } else if (mode === "zoom") {
             controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
-            showToast('Mode: Perbesar / Perkecil (Zoom)');
+            showToast("Mode: Perbesar / Perkecil (Zoom)");
         }
     };
 
@@ -471,14 +505,16 @@ export default function WastraMockup() {
 
         // Render sekali untuk memastikan buffer terisi
         renderer.render(scene, camera);
-        const dataUrl = renderer.domElement.toDataURL('image/png');
+        const dataUrl = renderer.domElement.toDataURL("image/png");
 
-        const link = document.createElement('a');
-        const normalizedTitle = (projectTitle || 'wastra').toLowerCase().replace(/\s+/g, '-');
+        const link = document.createElement("a");
+        const normalizedTitle = (projectTitle || "wastra")
+            .toLowerCase()
+            .replace(/\s+/g, "-");
         link.download = `mockup-3d-${normalizedTitle}-${mockupType}-${fabricType}.png`;
         link.href = dataUrl;
         link.click();
-        showToast('Mockup 3D berhasil diunduh (PNG)');
+        showToast("Mockup 3D berhasil diunduh (PNG)");
     };
 
     return (
@@ -498,7 +534,7 @@ export default function WastraMockup() {
                 {/* Logo & Judul Studio */}
                 <div className="flex items-center gap-3">
                     <Link href="/" className="flex items-center gap-2.5 group">
-                        <img width={40} src="logo-wastrakarya.svg" />
+                        <img width={40} src="/logo-wastrakarya.svg" />
                         <span className="font-heading text-2xl font-bold tracking-wide text-[#E2CEAB] group-hover:text-[#F3E5C8] transition-colors">
                             Wastrakarya
                         </span>
@@ -508,7 +544,7 @@ export default function WastraMockup() {
                 {/* Tombol Kembali ke Studio */}
                 <div>
                     <Link
-                        href="/canvas"
+                        href={mockupId ? `/canvas/${mockupId}` : "/canvas"}
                         className="flex items-center gap-2 text-xs font-medium text-[#7E9385] hover:text-[#E2CEAB] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#11241C]"
                     >
                         <ArrowLeft size={14} />
@@ -537,9 +573,9 @@ export default function WastraMockup() {
                     <div className="absolute inset-0 bg-radial from-[#132A20]/80 via-[#0A1812]/90 to-[#07130E] pointer-events-none" />
 
                     {/* Kontainer WebGL Three.js */}
-                    <div 
-                        ref={mountRef} 
-                        className="w-full h-full relative cursor-grab active:cursor-grabbing z-10" 
+                    <div
+                        ref={mountRef}
+                        className="w-full h-full relative cursor-grab active:cursor-grabbing z-10"
                     />
 
                     {/* Status pemuatan model saat pengguna mengganti mockup */}
@@ -548,8 +584,14 @@ export default function WastraMockup() {
                             <div className="flex items-center gap-2.5 rounded-full border border-[#2C483A] bg-[#0B1813]/90 px-4 py-2 text-xs font-medium text-[#BACDC2] shadow-xl backdrop-blur-md">
                                 {isModelLoading ? (
                                     <>
-                                        <Loader2 size={16} className="animate-spin text-[#D5BD8A]" />
-                                        <span>Memuat model {MOCKUP_MODELS[mockupType].label}...</span>
+                                        <Loader2
+                                            size={16}
+                                            className="animate-spin text-[#D5BD8A]"
+                                        />
+                                        <span>
+                                            Memuat model{" "}
+                                            {MOCKUP_MODELS[mockupType].label}...
+                                        </span>
                                     </>
                                 ) : (
                                     <span>Model gagal dimuat.</span>
@@ -563,44 +605,50 @@ export default function WastraMockup() {
                         <div className="bg-[#0B1813]/90 backdrop-blur-md border border-[#1E362C] rounded-2xl p-1.5 flex items-center gap-2 shadow-2xl">
                             {/* Tombol Orbit */}
                             <button
-                                onClick={() => handleSetControlMode('orbit')}
+                                onClick={() => handleSetControlMode("orbit")}
                                 title="Mode Rotasi Bebas"
                                 className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all ${
-                                    activeControlMode === 'orbit'
-                                        ? 'bg-[#CDB988] text-[#0A1612] shadow-md font-semibold'
-                                        : 'text-[#9CB0A4] hover:bg-[#142820] hover:text-[#E2CEAB]'
+                                    activeControlMode === "orbit"
+                                        ? "bg-[#CDB988] text-[#0A1612] shadow-md font-semibold"
+                                        : "text-[#9CB0A4] hover:bg-[#142820] hover:text-[#E2CEAB]"
                                 }`}
                             >
                                 <RotateCcw size={18} />
-                                <span className="text-[10px] mt-1 font-medium">Orbit</span>
+                                <span className="text-[10px] mt-1 font-medium">
+                                    Orbit
+                                </span>
                             </button>
 
                             {/* Tombol Pan */}
                             <button
-                                onClick={() => handleSetControlMode('pan')}
+                                onClick={() => handleSetControlMode("pan")}
                                 title="Mode Geser Tampilan"
                                 className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all ${
-                                    activeControlMode === 'pan'
-                                        ? 'bg-[#CDB988] text-[#0A1612] shadow-md font-semibold'
-                                        : 'text-[#9CB0A4] hover:bg-[#142820] hover:text-[#E2CEAB]'
+                                    activeControlMode === "pan"
+                                        ? "bg-[#CDB988] text-[#0A1612] shadow-md font-semibold"
+                                        : "text-[#9CB0A4] hover:bg-[#142820] hover:text-[#E2CEAB]"
                                 }`}
                             >
                                 <Move size={18} />
-                                <span className="text-[10px] mt-1 font-medium">Pan</span>
+                                <span className="text-[10px] mt-1 font-medium">
+                                    Pan
+                                </span>
                             </button>
 
                             {/* Tombol Zoom */}
                             <button
-                                onClick={() => handleSetControlMode('zoom')}
+                                onClick={() => handleSetControlMode("zoom")}
                                 title="Mode Perbesar"
                                 className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all ${
-                                    activeControlMode === 'zoom'
-                                        ? 'bg-[#CDB988] text-[#0A1612] shadow-md font-semibold'
-                                        : 'text-[#9CB0A4] hover:bg-[#142820] hover:text-[#E2CEAB]'
+                                    activeControlMode === "zoom"
+                                        ? "bg-[#CDB988] text-[#0A1612] shadow-md font-semibold"
+                                        : "text-[#9CB0A4] hover:bg-[#142820] hover:text-[#E2CEAB]"
                                 }`}
                             >
                                 <ZoomIn size={18} />
-                                <span className="text-[10px] mt-1 font-medium">Zoom</span>
+                                <span className="text-[10px] mt-1 font-medium">
+                                    Zoom
+                                </span>
                             </button>
                         </div>
 
@@ -626,17 +674,21 @@ export default function WastraMockup() {
                                     Model Mockup
                                 </p>
 
-                                <div className="grid grid-cols-2 gap-2.5" role="group" aria-label="Pilih model mockup">
+                                <div
+                                    className="grid grid-cols-2 gap-2.5"
+                                    role="group"
+                                    aria-label="Pilih model mockup"
+                                >
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setMockupType('shirt');
+                                            setMockupType("shirt");
                                         }}
-                                        aria-pressed={mockupType === 'shirt'}
+                                        aria-pressed={mockupType === "shirt"}
                                         className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-3 text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D5BD8A] ${
-                                            mockupType === 'shirt'
-                                                ? 'bg-[#142920] border-[#CDB988] text-[#F5EFEB] shadow-sm'
-                                                : 'bg-[#08140F] border-[#182C24] text-[#7E9385] hover:border-[#2C483A] hover:text-[#BACDC2]'
+                                            mockupType === "shirt"
+                                                ? "bg-[#142920] border-[#CDB988] text-[#F5EFEB] shadow-sm"
+                                                : "bg-[#08140F] border-[#182C24] text-[#7E9385] hover:border-[#2C483A] hover:text-[#BACDC2]"
                                         }`}
                                     >
                                         <Shirt size={20} />
@@ -646,13 +698,13 @@ export default function WastraMockup() {
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setMockupType('cloth');
+                                            setMockupType("cloth");
                                         }}
-                                        aria-pressed={mockupType === 'cloth'}
+                                        aria-pressed={mockupType === "cloth"}
                                         className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-3 text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D5BD8A] ${
-                                            mockupType === 'cloth'
-                                                ? 'bg-[#142920] border-[#CDB988] text-[#F5EFEB] shadow-sm'
-                                                : 'bg-[#08140F] border-[#182C24] text-[#7E9385] hover:border-[#2C483A] hover:text-[#BACDC2]'
+                                            mockupType === "cloth"
+                                                ? "bg-[#142920] border-[#CDB988] text-[#F5EFEB] shadow-sm"
+                                                : "bg-[#08140F] border-[#182C24] text-[#7E9385] hover:border-[#2C483A] hover:text-[#BACDC2]"
                                         }`}
                                     >
                                         <RectangleHorizontal size={20} />
@@ -664,7 +716,9 @@ export default function WastraMockup() {
                             {/* Kontrol Motif Scale */}
                             <div className="mb-6">
                                 <div className="flex items-center justify-between text-xs mb-3">
-                                    <span className="font-medium text-[#BACDC2]">Motif Scale</span>
+                                    <span className="font-medium text-[#BACDC2]">
+                                        Motif Scale
+                                    </span>
                                     <span className="bg-[#08140F] border border-[#182C24] text-[#E2CEAB] text-[11px] font-mono font-medium px-2.5 py-0.5 rounded-lg">
                                         {Math.round(motifScale * 100)}%
                                     </span>
@@ -676,7 +730,11 @@ export default function WastraMockup() {
                                     max="2.0"
                                     step="0.05"
                                     value={motifScale}
-                                    onChange={(e) => setMotifScale(parseFloat(e.target.value))}
+                                    onChange={(e) =>
+                                        setMotifScale(
+                                            parseFloat(e.target.value),
+                                        )
+                                    }
                                     className="w-full h-1.5 bg-[#182C24] rounded-lg appearance-none cursor-pointer accent-[#D5BD8A]"
                                 />
 
@@ -696,24 +754,32 @@ export default function WastraMockup() {
                                     {/* Pilihan: Sutra */}
                                     <div
                                         onClick={() => {
-                                            setFabricType('sutra');
-                                            showToast('Bahan: Sutra (Kilau Halus)');
+                                            setFabricType("sutra");
+                                            showToast(
+                                                "Bahan: Sutra (Kilau Halus)",
+                                            );
                                         }}
                                         className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                                            fabricType === 'sutra'
-                                                ? 'bg-[#142920] border-[#CDB988] shadow-sm'
-                                                : 'bg-[#08140F] border-[#182C24] hover:border-[#2C483A]'
+                                            fabricType === "sutra"
+                                                ? "bg-[#142920] border-[#CDB988] shadow-sm"
+                                                : "bg-[#08140F] border-[#182C24] hover:border-[#2C483A]"
                                         }`}
                                     >
-                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 ${
-                                            fabricType === 'sutra' ? 'border-[#CDB988]' : 'border-[#7E9385]'
-                                        }`}>
-                                            {fabricType === 'sutra' && (
+                                        <div
+                                            className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 ${
+                                                fabricType === "sutra"
+                                                    ? "border-[#CDB988]"
+                                                    : "border-[#7E9385]"
+                                            }`}
+                                        >
+                                            {fabricType === "sutra" && (
                                                 <div className="w-2 h-2 rounded-full bg-[#CDB988]" />
                                             )}
                                         </div>
                                         <div>
-                                            <h4 className="text-xs font-semibold text-[#F5EFEB]">Sutra</h4>
+                                            <h4 className="text-xs font-semibold text-[#F5EFEB]">
+                                                Sutra
+                                            </h4>
                                             <p className="text-[11px] text-[#7E9385] mt-0.5">
                                                 Halus dengan kilau yang lembut
                                             </p>
@@ -723,26 +789,35 @@ export default function WastraMockup() {
                                     {/* Pilihan: Linen */}
                                     <div
                                         onClick={() => {
-                                            setFabricType('linen');
-                                            showToast('Bahan: Linen (Serat Alami)');
+                                            setFabricType("linen");
+                                            showToast(
+                                                "Bahan: Linen (Serat Alami)",
+                                            );
                                         }}
                                         className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                                            fabricType === 'linen'
-                                                ? 'bg-[#142920] border-[#CDB988] shadow-sm'
-                                                : 'bg-[#08140F] border-[#182C24] hover:border-[#2C483A]'
+                                            fabricType === "linen"
+                                                ? "bg-[#142920] border-[#CDB988] shadow-sm"
+                                                : "bg-[#08140F] border-[#182C24] hover:border-[#2C483A]"
                                         }`}
                                     >
-                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 ${
-                                            fabricType === 'linen' ? 'border-[#CDB988]' : 'border-[#7E9385]'
-                                        }`}>
-                                            {fabricType === 'linen' && (
+                                        <div
+                                            className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 ${
+                                                fabricType === "linen"
+                                                    ? "border-[#CDB988]"
+                                                    : "border-[#7E9385]"
+                                            }`}
+                                        >
+                                            {fabricType === "linen" && (
                                                 <div className="w-2 h-2 rounded-full bg-[#CDB988]" />
                                             )}
                                         </div>
                                         <div>
-                                            <h4 className="text-xs font-semibold text-[#F5EFEB]">Linen</h4>
+                                            <h4 className="text-xs font-semibold text-[#F5EFEB]">
+                                                Linen
+                                            </h4>
                                             <p className="text-[11px] text-[#7E9385] mt-0.5">
-                                                Tekstur alami, ringan & berkarakter
+                                                Tekstur alami, ringan &
+                                                berkarakter
                                             </p>
                                         </div>
                                     </div>

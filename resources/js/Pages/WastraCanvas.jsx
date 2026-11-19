@@ -1,14 +1,10 @@
-import {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Head, usePage } from "@inertiajs/react";
 import { BATIK_MOTIFS } from "@/Components/WastraCanvas/BatikMotifs";
 import CanvasAnimationStyles from "@/Components/WastraCanvas/CanvasAnimationStyles";
 import CanvasWorkspace from "@/Components/WastraCanvas/CanvasWorkspace";
 import CollaborationPreviewBanner from "@/Components/WastraCanvas/CollaborationPreviewBanner";
+import DyeingOverlay from "@/Components/WastraCanvas/DyeingOverlay";
 import HeatingOverlay from "@/Components/WastraCanvas/HeatingOverlay";
 import MalamToolPanel from "@/Components/WastraCanvas/MalamToolPanel";
 import MotifDetailModal from "@/Components/WastraCanvas/MotifDetailModal";
@@ -24,7 +20,18 @@ import {
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
     DRAWING_DURATION_SECONDS,
+    FABRIC_BASE_COLOR,
+    SAVED_CANVAS_IMAGE_QUALITY,
+    SAVED_CANVAS_IMAGE_TYPE,
 } from "@/Components/WastraCanvas/constants";
+import { clearCanvas } from "@/Components/WastraCanvas/canvasPixels";
+import {
+    hasStoredArtwork,
+    isStoredDrawingScopedTo,
+    normalizeStoredDrawing,
+    removeStoredDrawingIfMatching,
+    shouldUseStoredDrawing,
+} from "@/Components/WastraCanvas/drawingStorage";
 import {
     getJsonRequestHeaders,
     getRequestHeaders,
@@ -34,8 +41,8 @@ import useCanvasHistory from "@/Components/WastraCanvas/hooks/useCanvasHistory";
 import useCanvasInteraction from "@/Components/WastraCanvas/hooks/useCanvasInteraction";
 import useCanvasRenderer from "@/Components/WastraCanvas/hooks/useCanvasRenderer";
 import useCanvasTutorial from "@/Components/WastraCanvas/hooks/useCanvasTutorial";
+import useDyeingProcess from "@/Components/WastraCanvas/hooks/useDyeingProcess";
 import useMalamProcess from "@/Components/WastraCanvas/hooks/useMalamProcess";
-import useSavedDrawings from "@/Components/WastraCanvas/hooks/useSavedDrawings";
 import useToast from "@/Components/WastraCanvas/hooks/useToast";
 
 export default function WastraCanvas({
@@ -53,11 +60,12 @@ export default function WastraCanvas({
     const [selectedMotif, setSelectedMotif] = useState(
         initialDrawing?.motif || "kawung",
     );
+    const [fabricColor, setFabricColor] = useState(
+        initialDrawing?.fabric_color || FABRIC_BASE_COLOR,
+    );
     const [showGuide, setShowGuide] = useState(true);
     const [guideOpacity] = useState(0.75);
     const [showTileGrid, setShowTileGrid] = useState(false);
-    const [favorites, setFavorites] = useState(["kawung", "parang"]);
-    const [activeTab, setActiveTab] = useState("all");
 
     const [zoom, setZoom] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -70,11 +78,16 @@ export default function WastraCanvas({
     );
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [showSaveDialog, setShowSaveDialog] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [saveNameInput, setSaveNameInput] = useState("");
+    const [saveMode, setSaveMode] = useState("save");
     const [saveRedirect, setSaveRedirect] = useState(null);
     const [restoreDrawing, setRestoreDrawing] = useState(false);
     const [loadedDrawingId, setLoadedDrawingId] = useState(
         initialDrawing?.id || canvasId || null,
+    );
+    const [hasPersistedArtwork, setHasPersistedArtwork] = useState(
+        Boolean(initialDrawing?.data_url),
     );
 
     const [shareType, setShareType] = useState(
@@ -89,12 +102,15 @@ export default function WastraCanvas({
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
     const canvasChannelRef = useRef(null);
+    const saveInProgressRef = useRef(false);
+    const toolPanelBoundsRef = useRef(null);
 
     const hasActiveSubscription = Boolean(
         user?.has_active_subscription ?? user?.is_subscribed,
     );
 
     const malam = useMalamProcess({ setStatusMessage });
+    const dyeing = useDyeingProcess({ setStatusMessage });
     const {
         drawingTimeLeft,
         malamState,
@@ -113,9 +129,13 @@ export default function WastraCanvas({
         canvasRef,
         canvasWidth,
         getArtworkCanvas,
+        getPencilCanvas,
+        getWaxCanvas,
+        loadArtworkLayers,
         renderMainCanvasRef,
         scheduleMainCanvasRender,
     } = useCanvasRenderer({
+        fabricColor,
         guideOpacity,
         pan,
         selectedMotif,
@@ -124,22 +144,21 @@ export default function WastraCanvas({
         zoom,
     });
 
-    const {
-        canRedo,
-        canUndo,
-        handleRedo,
-        handleUndo,
-        saveStateToHistory,
-    } = useCanvasHistory({
-        getArtworkCanvas,
-        renderMainCanvasRef,
-        setHasUnsavedChanges,
-    });
+    const { canRedo, canUndo, handleRedo, handleUndo, saveStateToHistory } =
+        useCanvasHistory({
+            fabricColor,
+            getPencilCanvas,
+            getWaxCanvas,
+            renderMainCanvasRef,
+            setFabricColor,
+            setHasUnsavedChanges,
+        });
 
     const interaction = useCanvasInteraction({
         canvasChannelRef,
         canvasRef,
-        getArtworkCanvas,
+        getPencilCanvas,
+        getWaxCanvas,
         handleCantingDip: malam.handleCantingDip,
         handleRedo,
         handleUndo,
@@ -189,18 +208,8 @@ export default function WastraCanvas({
         waxColor,
     });
 
-    const {
-        fetchSavedDrawings,
-        handleDeleteDrawing,
-        savedDrawings,
-        savedLoading,
-    } = useSavedDrawings({ showToast, user });
-
     const applyMotifSelection = useCallback(
-        (
-            motifId,
-            { broadcastChange = false, markUnsaved = false } = {},
-        ) => {
+        (motifId, { broadcastChange = false, markUnsaved = false } = {}) => {
             if (!motifId) {
                 return;
             }
@@ -229,45 +238,111 @@ export default function WastraCanvas({
         [loadedDrawingId, user?.id, user?.name],
     );
 
-    const filteredMotifs = BATIK_MOTIFS.filter((motif) => {
-        if (activeTab === "favorites") {
-            return favorites.includes(motif.id);
-        }
+    const createFabricSnapshot = useCallback(
+        (sourceArtwork = null) => {
+            const artwork = sourceArtwork ?? getArtworkCanvas();
+            if (!artwork) {
+                return null;
+            }
 
-        return true;
-    });
-
-    const toggleFavorite = (motifId, event) => {
-        event?.stopPropagation();
-
-        if (favorites.includes(motifId)) {
-            setFavorites((currentFavorites) =>
-                currentFavorites.filter((favorite) => favorite !== motifId),
+            const textureSize = 640;
+            const snapshot = document.createElement("canvas");
+            snapshot.width = textureSize;
+            snapshot.height = textureSize;
+            const context = snapshot.getContext("2d", { alpha: true });
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = "high";
+            context.drawImage(
+                artwork,
+                0,
+                0,
+                artwork.width,
+                artwork.height,
+                0,
+                0,
+                textureSize,
+                textureSize,
             );
-            showToast("Motif dihapus dari Favorit");
-        } else {
-            setFavorites((currentFavorites) => [
-                ...currentFavorites,
-                motifId,
-            ]);
-            showToast("Motif ditambahkan ke Favorit");
-        }
-    };
 
-    const handleClearCanvas = () => {
-        const artwork = getArtworkCanvas();
-        if (!artwork) {
+            return snapshot.toDataURL("image/png");
+        },
+        [getArtworkCanvas],
+    );
+
+    const handleStartDyeing = useCallback(() => {
+        const textureUrl = createFabricSnapshot();
+        if (!textureUrl || !canvasRef.current) {
+            showToast("Kanvas belum siap untuk proses pencelupan");
             return;
         }
 
+        dyeing.openDyeing({
+            sourceElement: canvasRef.current,
+            textureUrl,
+            pencilTextureUrl: createFabricSnapshot(getPencilCanvas()),
+            waxTextureUrl: createFabricSnapshot(getWaxCanvas()),
+            currentFabricColor: fabricColor,
+        });
+    }, [
+        canvasRef,
+        createFabricSnapshot,
+        dyeing,
+        fabricColor,
+        getPencilCanvas,
+        getWaxCanvas,
+        showToast,
+    ]);
+
+    const handleApplyDye = useCallback(() => {
         saveStateToHistory();
-        const context = artwork.getContext("2d");
-        context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        renderMainCanvasRef.current();
+        clearCanvas(getPencilCanvas());
+        const dyedTextureUrl = createFabricSnapshot();
+        if (dyedTextureUrl) {
+            dyeing.prepareClosingCloth({
+                textureUrl: dyedTextureUrl,
+                currentFabricColor: dyeing.selectedDye.hex,
+            });
+        }
+        setFabricColor(dyeing.selectedDye.hex);
+        setShowGuide(false);
+        setHasUnsavedChanges(true);
+        scheduleMainCanvasRender();
+
+        if (canvasChannelRef.current && loadedDrawingId) {
+            try {
+                canvasChannelRef.current.whisper("fabric-color", {
+                    color: dyeing.selectedDye.hex,
+                    userId: user?.id,
+                    userName: user?.name,
+                });
+            } catch (_) {}
+        }
+
+        showToast(`Kain diwarnai ${dyeing.selectedDye.name}`);
+        dyeing.closeDyeing();
+    }, [
+        dyeing,
+        createFabricSnapshot,
+        getPencilCanvas,
+        loadedDrawingId,
+        saveStateToHistory,
+        scheduleMainCanvasRender,
+        showToast,
+        user?.id,
+        user?.name,
+    ]);
+
+    const handleClearCanvas = () => {
+        saveStateToHistory();
+        clearCanvas(getPencilCanvas());
+        clearCanvas(getWaxCanvas());
+        setFabricColor(FABRIC_BASE_COLOR);
+        scheduleMainCanvasRender();
 
         if (canvasChannelRef.current && loadedDrawingId) {
             try {
                 canvasChannelRef.current.whisper("clear", {
+                    fabricColor: FABRIC_BASE_COLOR,
                     userId: user?.id,
                     userName: user?.name,
                 });
@@ -279,57 +354,145 @@ export default function WastraCanvas({
         setShowMoreMenu(false);
     };
 
-    const handleSave = (redirectTo = null) => {
+    const handleSave = (redirectTo = null, mode = "save") => {
         if (user && loadedDrawingId && !isOwner) {
             showToast("Hanya pemilik kanvas yang dapat menyimpan perubahan");
             return;
         }
 
-        const artwork = getArtworkCanvas();
-        if (!artwork) {
+        if (
+            mode === "save-as" &&
+            (!user || !loadedDrawingId || !hasPersistedArtwork)
+        ) {
             return;
         }
 
-        setSaveRedirect(redirectTo);
-        setSaveNameInput(projectTitle);
-        setShowSaveDialog(true);
         setShowMoreMenu(false);
+
+        if (
+            mode === "save" &&
+            user &&
+            loadedDrawingId &&
+            hasPersistedArtwork
+        ) {
+            void handleConfirmSave(projectTitle, false, {
+                mode,
+                redirectTo,
+            });
+            return;
+        }
+
+        setSaveMode(mode);
+        setSaveRedirect(redirectTo);
+        setSaveNameInput(
+            mode === "save-as" ? `${projectTitle} - Salinan` : projectTitle,
+        );
+        setShowSaveDialog(true);
     };
+
+    const handleCancelSave = () => {
+        if (saveInProgressRef.current) {
+            return;
+        }
+
+        setShowSaveDialog(false);
+        setSaveMode("save");
+        setSaveRedirect(null);
+    };
+
+    const clearMatchingRecoverySnapshots = useCallback(
+        (drawingId) => {
+            const scope = {
+                canvasId: drawingId,
+                userId: user?.id ?? null,
+                ownerId: user?.id ?? null,
+                allowLegacyGuest: !user,
+            };
+
+            removeStoredDrawingIfMatching(
+                sessionStorage,
+                "wastrakarya_mockup_snapshot",
+                scope,
+            );
+            removeStoredDrawingIfMatching(
+                localStorage,
+                "wastrakarya_studio_session",
+                scope,
+            );
+            removeStoredDrawingIfMatching(
+                localStorage,
+                "wastrakarya_studio_save",
+                scope,
+            );
+        },
+        [user],
+    );
 
     const handleConfirmSave = async (
         customTitle = null,
         openShareAfterSave = false,
+        saveOptions = {},
     ) => {
+        if (saveInProgressRef.current) {
+            return;
+        }
+
         if (user && loadedDrawingId && !isOwner) {
             setShowSaveDialog(false);
+            setSaveRedirect(null);
             showToast("Hanya pemilik kanvas yang dapat menyimpan perubahan");
             return;
         }
 
-        const artwork = getArtworkCanvas();
-        if (!artwork) {
-            return;
-        }
+        saveInProgressRef.current = true;
+        setIsSaving(true);
+        const requestedRedirect = Object.prototype.hasOwnProperty.call(
+            saveOptions,
+            "redirectTo",
+        )
+            ? saveOptions.redirectTo
+            : saveRedirect;
+        const requestedSaveMode = saveOptions.mode ?? saveMode;
+        const sourceDrawingId = loadedDrawingId;
+        const shouldSaveAs =
+            requestedSaveMode === "save-as" &&
+            Boolean(user && sourceDrawingId && hasPersistedArtwork);
+        setSaveRedirect(null);
 
-        const title =
-            typeof customTitle === "string" && customTitle.trim()
-                ? customTitle.trim()
-                : saveNameInput.trim() || projectTitle;
-        const payload = {
-            title,
-            motif: selectedMotif,
-            waxColor,
-            waxColorName,
-            cantingSize: CANTING_SIZE,
-            data_url: artwork.toDataURL(),
-            updated_at: new Date().toISOString(),
-        };
+        try {
+            const artwork = getArtworkCanvas();
+            const pencilCanvas = getPencilCanvas();
+            const waxCanvas = getWaxCanvas();
+            const artworkDataUrl = artwork.toDataURL(
+                SAVED_CANVAS_IMAGE_TYPE,
+                SAVED_CANVAS_IMAGE_QUALITY,
+            );
+            const pencilDataUrl = pencilCanvas.toDataURL(
+                SAVED_CANVAS_IMAGE_TYPE,
+                SAVED_CANVAS_IMAGE_QUALITY,
+            );
+            const waxDataUrl = waxCanvas.toDataURL(
+                SAVED_CANVAS_IMAGE_TYPE,
+                SAVED_CANVAS_IMAGE_QUALITY,
+            );
 
-        setProjectTitle(title);
-        setShowSaveDialog(false);
+            const title =
+                typeof customTitle === "string" && customTitle.trim()
+                    ? customTitle.trim()
+                    : saveNameInput.trim() || projectTitle;
+            const payload = {
+                title,
+                motif: selectedMotif,
+                wax_color: waxColor,
+                wax_color_name: waxColorName,
+                fabric_color: fabricColor,
+                canting_size: CANTING_SIZE,
+                data_url: artworkDataUrl,
+                pencil_data_url: pencilDataUrl,
+                wax_data_url: waxDataUrl,
+            };
 
-        const persistDrawing = async (method, url) => {
-            try {
+            const persistDrawing = async (method, url) => {
                 const response = await fetch(url, {
                     method,
                     headers: getJsonRequestHeaders(),
@@ -337,14 +500,29 @@ export default function WastraCanvas({
                 });
 
                 if (!response.ok) {
-                    throw new Error("Gagal menyimpan ke akun");
+                    const errorData = await response.json().catch(() => null);
+                    throw new Error(
+                        errorData?.message ||
+                            Object.values(errorData?.errors || {})
+                                .flat()
+                                .find(Boolean) ||
+                            "Gagal menyimpan ke akun",
+                    );
                 }
 
                 const data = await response.json();
+                setProjectTitle(title);
                 setHasUnsavedChanges(false);
-                await fetchSavedDrawings();
+                setHasPersistedArtwork(true);
 
                 if (data?.id) {
+                    if (sourceDrawingId == null || shouldSaveAs) {
+                        window.history.replaceState(
+                            window.history.state,
+                            "",
+                            `/canvas/${data.id}`,
+                        );
+                    }
                     setLoadedDrawingId(data.id);
                     if (data.share_type) {
                         setShareType(data.share_type);
@@ -357,80 +535,135 @@ export default function WastraCanvas({
                     }
                 }
 
-                showToast("Karya berhasil disimpan!");
+                showToast(
+                    shouldSaveAs
+                        ? "Salinan karya berhasil dibuat!"
+                        : "Karya berhasil disimpan!",
+                );
                 if (openShareAfterSave && data?.id) {
                     setShareModalOpen(true);
                 }
 
                 return data;
-            } catch (error) {
-                console.error(error);
-                showToast("Gagal menyimpan ke akun");
-                return null;
-            }
-        };
+            };
 
-        if (user) {
-            const isUpdate = loadedDrawingId != null;
-            if (isUpdate) {
-                await persistDrawing(
-                    "PUT",
-                    `/api/user-drawings/${loadedDrawingId}`,
-                );
+            let persistedDrawing = null;
+
+            if (user) {
+                if (shouldSaveAs) {
+                    persistedDrawing = await persistDrawing(
+                        "POST",
+                        "/api/user-drawings",
+                    );
+                } else if (sourceDrawingId != null) {
+                    persistedDrawing = await persistDrawing(
+                        "PUT",
+                        `/api/user-drawings/${sourceDrawingId}`,
+                    );
+                } else {
+                    persistedDrawing = await persistDrawing(
+                        "POST",
+                        "/api/user-drawings",
+                    );
+                }
+
+                if (shouldSaveAs) {
+                    clearMatchingRecoverySnapshots(sourceDrawingId);
+                }
+                clearMatchingRecoverySnapshots(persistedDrawing.id);
             } else {
-                await persistDrawing("POST", "/api/user-drawings");
-            }
-        } else {
-            try {
+                const savedAt = new Date().toISOString();
+                const storedDrawing = {
+                    canvasId: loadedDrawingId,
+                    userId: null,
+                    title,
+                    motif: selectedMotif,
+                    waxColor,
+                    waxColorName,
+                    fabricColor,
+                    cantingSize: CANTING_SIZE,
+                    data_url: artworkDataUrl,
+                    dataUrl: artworkDataUrl,
+                    pencilDataUrl,
+                    waxDataUrl,
+                    updatedAt: savedAt,
+                };
+
                 localStorage.setItem(
                     "wastrakarya_studio_save",
+                    JSON.stringify(storedDrawing),
+                );
+                localStorage.setItem(
+                    "wastrakarya_studio_session",
                     JSON.stringify({
-                        ...payload,
-                        updatedAt: new Date().toISOString(),
+                        canvasId: loadedDrawingId,
+                        userId: null,
+                        title,
+                        motif: selectedMotif,
+                        waxColor,
+                        waxColorName,
+                        fabricColor,
+                        cantingSize: CANTING_SIZE,
+                        malamState,
+                        heatingProgress: malam.heatingProgress,
+                        drawingTimeLeft,
+                        showGuide,
+                        activeTool,
+                        updatedAt: savedAt,
                     }),
                 );
+                setProjectTitle(title);
                 setHasUnsavedChanges(false);
                 showToast(
                     "Karya disimpan secara lokal. Masuk untuk menyimpan ke akun Anda!",
                 );
-            } catch (error) {
-                console.error(error);
-                showToast("Gagal menyimpan ke penyimpanan lokal");
             }
-        }
 
-        try {
-            localStorage.setItem(
-                "wastrakarya_studio_session",
-                JSON.stringify({
-                    malamState,
-                    heatingProgress: malam.heatingProgress,
-                    drawingTimeLeft,
-                    waxColor,
-                    waxColorName,
-                    title,
-                    motif: selectedMotif,
-                    showGuide,
-                    activeTool,
-                    cantingSize: CANTING_SIZE,
-                    dataUrl: artwork.toDataURL(),
-                    updatedAt: new Date().toISOString(),
-                }),
+            setShowSaveDialog(false);
+            setSaveMode("save");
+
+            if (typeof requestedRedirect === "string" && requestedRedirect) {
+                const redirectDrawingId =
+                    persistedDrawing?.id ?? loadedDrawingId;
+                const redirectUrl =
+                    requestedRedirect === "/mockup" && redirectDrawingId
+                        ? `/mockup/${redirectDrawingId}`
+                        : requestedRedirect;
+
+                if (requestedRedirect === "/mockup" && !user) {
+                    sessionStorage.setItem(
+                        "wastrakarya_mockup_snapshot",
+                        JSON.stringify({
+                            canvasId: redirectDrawingId,
+                            userId: user?.id ?? null,
+                            title,
+                            motif: selectedMotif,
+                            fabricColor,
+                            fabric_color: fabricColor,
+                            dataUrl: artworkDataUrl,
+                            data_url: artworkDataUrl,
+                            updatedAt:
+                                persistedDrawing?.updated_at ??
+                                new Date().toISOString(),
+                        }),
+                    );
+                }
+
+                window.location.href = redirectUrl;
+            }
+        } catch (error) {
+            console.error(error);
+            setSaveRedirect(requestedRedirect);
+            setHasUnsavedChanges(true);
+            showToast(
+                error.message ||
+                    (user
+                        ? "Gagal menyimpan ke akun"
+                        : "Gagal menyimpan ke penyimpanan lokal"),
             );
-        } catch (_) {}
-
-        try {
-            localStorage.setItem(
-                "wastrakarya_studio_save",
-                JSON.stringify({
-                    ...payload,
-                    updatedAt: new Date().toISOString(),
-                }),
-            );
-        } catch (_) {}
-
-        if (typeof saveRedirect === "string" && saveRedirect) {
-            window.location.href = saveRedirect;
+        } finally {
+            saveInProgressRef.current = false;
+            setIsSaving(false);
         }
     };
 
@@ -458,51 +691,155 @@ export default function WastraCanvas({
         setShareModalOpen(true);
     };
 
-    const handleLoadDrawing = useCallback(
+    const getStoredDrawingSnapshot = useCallback(
         (drawing) => {
-            const artwork = getArtworkCanvas();
-            if (!artwork) {
+            if (!drawing?.id) {
+                return null;
+            }
+
+            const storageItems = [
+                [sessionStorage, "wastrakarya_mockup_snapshot"],
+                [localStorage, "wastrakarya_studio_session"],
+                [localStorage, "wastrakarya_studio_save"],
+            ];
+
+            for (const [storage, key] of storageItems) {
+                try {
+                    const storedValue = storage.getItem(key);
+                    if (!storedValue) {
+                        continue;
+                    }
+
+                    const snapshot = JSON.parse(storedValue);
+                    if (
+                        !isStoredDrawingScopedTo(snapshot, {
+                            canvasId: drawing.id,
+                            userId: user?.id ?? null,
+                            ownerId:
+                                drawing.user_id ?? drawing.owner?.id ?? null,
+                            allowLegacyGuest: !user,
+                        })
+                    ) {
+                        continue;
+                    }
+
+                    if (!shouldUseStoredDrawing(snapshot, drawing)) {
+                        continue;
+                    }
+
+                    const normalizedSnapshot = normalizeStoredDrawing(snapshot);
+
+                    return {
+                        title: snapshot.title,
+                        motif: snapshot.motif,
+                        fabric_color: normalizedSnapshot.fabricColor,
+                        data_url: normalizedSnapshot.dataUrl,
+                        pencil_data_url: normalizedSnapshot.pencilDataUrl,
+                        wax_data_url: normalizedSnapshot.waxDataUrl,
+                        updated_at: normalizedSnapshot.updatedAt,
+                    };
+                } catch (error) {
+                    console.error(`Gagal membaca snapshot ${key}`, error);
+                }
+            }
+
+            return null;
+        },
+        [user],
+    );
+
+    const handleLoadDrawing = useCallback(
+        async (drawing) => {
+            let fullDrawing = drawing;
+            let drawingHasPersistedArtwork = Boolean(drawing?.data_url);
+            let restoredFromSnapshot = false;
+            const artworkLayersNeedFetching =
+                drawing?.id &&
+                drawing.pencil_data_url === undefined &&
+                drawing.wax_data_url === undefined;
+
+            if (artworkLayersNeedFetching) {
+                try {
+                    const response = await fetch(
+                        `/api/user-drawings/${drawing.id}`,
+                        { headers: getRequestHeaders() },
+                    );
+                    if (!response.ok) {
+                        throw new Error("Gagal memuat layer karya");
+                    }
+                    fullDrawing = await response.json();
+                    drawingHasPersistedArtwork = Boolean(fullDrawing.data_url);
+                } catch (error) {
+                    console.error(error);
+                    showToast("Gagal memuat layer karya terpilih");
+                    return;
+                }
+            }
+
+            if (fullDrawing.id) {
+                const storedSnapshot = getStoredDrawingSnapshot(fullDrawing);
+
+                if (storedSnapshot) {
+                    fullDrawing = {
+                        ...fullDrawing,
+                        ...storedSnapshot,
+                    };
+                    restoredFromSnapshot = true;
+                }
+            }
+
+            const hasLoadableArtwork = hasStoredArtwork(fullDrawing);
+
+            if (!hasLoadableArtwork) {
+                showToast(
+                    "Karya ini belum memiliki gambar tersimpan. Kanvas saat ini tidak diubah.",
+                );
                 return;
             }
 
             saveStateToHistory();
-            const context = artwork.getContext("2d");
-            context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-            const image = new Image();
-            image.onload = () => {
-                context.drawImage(image, 0, 0);
+            try {
+                await loadArtworkLayers({
+                    compositeDataUrl: fullDrawing.data_url,
+                    pencilDataUrl: fullDrawing.pencil_data_url,
+                    waxDataUrl: fullDrawing.wax_data_url,
+                });
                 renderMainCanvasRef.current();
-            };
-            image.src = drawing.data_url;
-
-            if (drawing.title) {
-                setProjectTitle(drawing.title);
-            }
-            if (drawing.motif) {
-                applyMotifSelection(drawing.motif);
-            }
-            if (drawing.wax_color) {
-                setWaxColor(drawing.wax_color);
-            }
-            if (drawing.wax_color_name) {
-                setWaxColorName(drawing.wax_color_name);
+            } catch (error) {
+                console.error(error);
+                showToast("Data gambar karya tidak dapat dimuat");
+                return;
             }
 
-            setHasUnsavedChanges(false);
-            setActiveTab("all");
-            setLoadedDrawingId(drawing.id ?? null);
+            if (fullDrawing.title) {
+                setProjectTitle(fullDrawing.title);
+            }
+            if (fullDrawing.motif) {
+                applyMotifSelection(fullDrawing.motif);
+            }
+            if (fullDrawing.wax_color) {
+                setWaxColor(fullDrawing.wax_color);
+            }
+            if (fullDrawing.wax_color_name) {
+                setWaxColorName(fullDrawing.wax_color_name);
+            }
+            setFabricColor(fullDrawing.fabric_color || FABRIC_BASE_COLOR);
 
-            if (drawing.share_type) {
-                setShareType(drawing.share_type);
+            setHasUnsavedChanges(restoredFromSnapshot);
+            setHasPersistedArtwork(drawingHasPersistedArtwork);
+            setLoadedDrawingId(fullDrawing.id ?? null);
+
+            if (fullDrawing.share_type) {
+                setShareType(fullDrawing.share_type);
             }
 
             const drawingIsOwner =
-                drawing.is_owner !== undefined
-                    ? Boolean(drawing.is_owner)
-                    : Number(drawing.user_id) === Number(user?.id);
+                fullDrawing.is_owner !== undefined
+                    ? Boolean(fullDrawing.is_owner)
+                    : Number(fullDrawing.user_id) === Number(user?.id);
             const drawingOwner =
-                drawing.owner ||
-                drawing.user ||
+                fullDrawing.owner ||
+                fullDrawing.user ||
                 (drawingIsOwner && user
                     ? { id: user.id, name: user.name }
                     : null);
@@ -513,11 +850,16 @@ export default function WastraCanvas({
                 setShareModalOpen(false);
             }
 
-            showToast(`Karya "${drawing.title}" dimuat`);
+            showToast(
+                restoredFromSnapshot
+                    ? `Karya "${fullDrawing.title}" dipulihkan. Simpan kembali untuk memperbarui database.`
+                    : `Karya "${fullDrawing.title}" dimuat`,
+            );
         },
         [
             applyMotifSelection,
-            getArtworkCanvas,
+            getStoredDrawingSnapshot,
+            loadArtworkLayers,
             renderMainCanvasRef,
             saveStateToHistory,
             setWaxColor,
@@ -537,7 +879,7 @@ export default function WastraCanvas({
         output.width = CANVAS_WIDTH;
         output.height = CANVAS_HEIGHT;
         const context = output.getContext("2d");
-        context.fillStyle = "#F5EFEB";
+        context.fillStyle = fabricColor;
         context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         context.drawImage(artwork, 0, 0);
 
@@ -550,8 +892,6 @@ export default function WastraCanvas({
         showToast("Kain batik berhasil diunduh (PNG)");
         setShowMoreMenu(false);
     };
-
-
     useEffect(() => {
         if (initialDrawing) {
             handleLoadDrawing(initialDrawing);
@@ -559,12 +899,19 @@ export default function WastraCanvas({
         }
 
         try {
-            const session = localStorage.getItem(
-                "wastrakarya_studio_session",
-            );
+            const session = localStorage.getItem("wastrakarya_studio_session");
 
             if (session) {
                 const data = JSON.parse(session);
+                if (
+                    !isStoredDrawingScopedTo(data, {
+                        canvasId: null,
+                        userId: user?.id ?? null,
+                        allowLegacyGuest: !user,
+                    })
+                ) {
+                    return;
+                }
                 if (data.malamState) {
                     setMalamState(data.malamState);
                 }
@@ -579,6 +926,9 @@ export default function WastraCanvas({
                 }
                 if (data.waxColorName) {
                     setWaxColorName(data.waxColorName);
+                }
+                if (data.fabricColor) {
+                    setFabricColor(data.fabricColor);
                 }
                 if (data.title) {
                     setProjectTitle(data.title);
@@ -598,31 +948,32 @@ export default function WastraCanvas({
                     setDrawingTimeLeft(DRAWING_DURATION_SECONDS);
                     setRestoreDrawing(true);
                 }
-                if (data.dataUrl) {
-                    const artwork = getArtworkCanvas();
-                    const context = artwork.getContext("2d");
-                    context.clearRect(
-                        0,
-                        0,
-                        CANVAS_WIDTH,
-                        CANVAS_HEIGHT,
-                    );
-                    const image = new Image();
-                    image.onload = () => {
-                        context.drawImage(image, 0, 0);
+                if (data.dataUrl || data.pencilDataUrl || data.waxDataUrl) {
+                    void loadArtworkLayers({
+                        compositeDataUrl: data.dataUrl,
+                        pencilDataUrl: data.pencilDataUrl,
+                        waxDataUrl: data.waxDataUrl,
+                    }).then(() => {
                         renderMainCanvasRef.current();
                         saveStateToHistory();
-                    };
-                    image.src = data.dataUrl;
+                    });
                 }
 
                 localStorage.removeItem("wastrakarya_studio_session");
-                return;
             }
 
             const saved = localStorage.getItem("wastrakarya_studio_save");
             if (saved) {
                 const data = JSON.parse(saved);
+                if (
+                    !isStoredDrawingScopedTo(data, {
+                        canvasId: null,
+                        userId: user?.id ?? null,
+                        allowLegacyGuest: !user,
+                    })
+                ) {
+                    return;
+                }
                 if (data.title) {
                     setProjectTitle(data.title);
                 }
@@ -635,22 +986,18 @@ export default function WastraCanvas({
                 if (data.waxColorName) {
                     setWaxColorName(data.waxColorName);
                 }
-                if (data.dataUrl) {
-                    const artwork = getArtworkCanvas();
-                    const context = artwork.getContext("2d");
-                    context.clearRect(
-                        0,
-                        0,
-                        CANVAS_WIDTH,
-                        CANVAS_HEIGHT,
-                    );
-                    const image = new Image();
-                    image.onload = () => {
-                        context.drawImage(image, 0, 0);
+                if (data.fabricColor) {
+                    setFabricColor(data.fabricColor);
+                }
+                if (data.dataUrl || data.pencilDataUrl || data.waxDataUrl) {
+                    void loadArtworkLayers({
+                        compositeDataUrl: data.dataUrl,
+                        pencilDataUrl: data.pencilDataUrl,
+                        waxDataUrl: data.waxDataUrl,
+                    }).then(() => {
                         renderMainCanvasRef.current();
                         saveStateToHistory();
-                    };
-                    image.src = data.dataUrl;
+                    });
                 }
             }
         } catch (error) {
@@ -667,8 +1014,7 @@ export default function WastraCanvas({
 
     useEffect(() => {
         const parameters = new URLSearchParams(window.location.search);
-        const drawingId =
-            parameters.get("drawing") || parameters.get("share");
+        const drawingId = parameters.get("drawing") || parameters.get("share");
 
         if (!drawingId) {
             return;
@@ -723,11 +1069,15 @@ export default function WastraCanvas({
         canvasChannelRef,
         cantingSize: CANTING_SIZE,
         drawRemoteLineBetween,
-        getArtworkCanvas,
+        getPencilCanvas,
+        getWaxCanvas,
+        loadArtworkLayers,
+        fabricColor,
         loadedDrawingId,
         projectTitle,
         renderMainCanvasRef,
         selectedMotif,
+        setFabricColor,
         setProjectTitle,
         setShareType,
         showToast,
@@ -741,12 +1091,26 @@ export default function WastraCanvas({
         }
 
         try {
-            await fetch(`/api/user-drawings/${loadedDrawingId}`, {
-                method: "PUT",
-                headers: getJsonRequestHeaders(),
-                body: JSON.stringify({ title: projectTitle }),
-            });
-        } catch (_) {}
+            const response = await fetch(
+                `/api/user-drawings/${loadedDrawingId}`,
+                {
+                    method: "PUT",
+                    headers: getJsonRequestHeaders(),
+                    body: JSON.stringify({ title: projectTitle }),
+                },
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(
+                    errorData?.message || "Gagal menyimpan nama karya",
+                );
+            }
+        } catch (error) {
+            console.error(error);
+            setHasUnsavedChanges(true);
+            showToast(error.message || "Gagal menyimpan nama karya");
+        }
     };
 
     const handleSelectMotif = (motif) => {
@@ -778,6 +1142,7 @@ export default function WastraCanvas({
             <CanvasAnimationStyles />
             <ToastNotification message={toastMessage} />
             <HeatingOverlay malam={malam} tutorial={tutorial} />
+            <DyeingOverlay dyeing={dyeing} onApply={handleApplyDye} />
 
             <MotifDetailModal
                 motif={detailMotifModal}
@@ -786,8 +1151,10 @@ export default function WastraCanvas({
             />
             <SaveDrawingModal
                 isOpen={showSaveDialog && isOwner}
+                isSaving={isSaving}
+                mode={saveMode}
                 name={saveNameInput}
-                onCancel={() => setShowSaveDialog(false)}
+                onCancel={handleCancelSave}
                 onConfirm={() => handleConfirmSave()}
                 onNameChange={setSaveNameInput}
             />
@@ -795,6 +1162,9 @@ export default function WastraCanvas({
             <StudioHeader
                 activeCollaborators={activeCollaborators}
                 canvasOwner={canvasOwner}
+                canSaveAs={Boolean(
+                    user && loadedDrawingId && hasPersistedArtwork,
+                )}
                 hasActiveSubscription={hasActiveSubscription}
                 hasUnsavedChanges={hasUnsavedChanges}
                 isEditingTitle={isEditingTitle}
@@ -802,6 +1172,7 @@ export default function WastraCanvas({
                 onOpenShare={handleOpenShare}
                 onOpenThreeDimensionalMockup={() => handleSave("/mockup")}
                 onSave={() => handleSave()}
+                onSaveAs={() => handleSave(null, "save-as")}
                 onStartTutorial={handleStartTutorial}
                 onTitleChange={setProjectTitle}
                 onTitleCommit={handleProjectTitleCommit}
@@ -816,13 +1187,10 @@ export default function WastraCanvas({
                 />
             )}
 
-            <div className="flex flex-1 overflow-hidden p-3 gap-3">
-                <MalamToolPanel
-                    activeTool={activeTool}
-                    malam={malam}
-                    malamWiggle={malamWiggle}
-                    onSelectTool={selectTool}
-                />
+            <div
+                ref={toolPanelBoundsRef}
+                className="relative flex flex-1 gap-3 overflow-hidden p-3"
+            >
                 <CanvasWorkspace
                     canvas={{
                         canvasHeight,
@@ -839,6 +1207,10 @@ export default function WastraCanvas({
                         onPointerDown: handleCanvasPointerDown,
                         onPointerMove: handleCanvasPointerMove,
                         onPointerUp: handleCanvasPointerUp,
+                    }}
+                    dyeing={{
+                        color: fabricColor,
+                        onStart: handleStartDyeing,
                     }}
                     history={{
                         canRedo,
@@ -865,21 +1237,21 @@ export default function WastraCanvas({
                     }}
                 />
                 <MotifLibraryPanel
-                    activeTab={activeTab}
-                    favorites={favorites}
-                    filteredMotifs={filteredMotifs}
-                    onDeleteDrawing={handleDeleteDrawing}
-                    onLoadDrawing={handleLoadDrawing}
+                    motifs={BATIK_MOTIFS}
                     onOpenMotifDetails={setDetailMotifModal}
                     onSelectMotif={handleSelectMotif}
-                    onToggleFavorite={toggleFavorite}
-                    savedDrawings={savedDrawings}
-                    savedLoading={savedLoading}
                     selectedMotif={selectedMotif}
-                    setActiveTab={setActiveTab}
                     setShowTileGrid={setShowTileGrid}
                     showTileGrid={showTileGrid}
                     user={user}
+                />
+                <MalamToolPanel
+                    activeTool={activeTool}
+                    containerRef={toolPanelBoundsRef}
+                    forceExpanded={tutorial.showTutorial}
+                    malam={malam}
+                    malamWiggle={malamWiggle}
+                    onSelectTool={selectTool}
                 />
             </div>
 
@@ -887,7 +1259,11 @@ export default function WastraCanvas({
                 isHeatingOverlayOpen={malam.isHeatingOverlayOpen}
                 isPopupTutorialStep={tutorial.isPopupTutorialStep}
                 onFinish={tutorial.stopTutorial}
-                onNext={() => tutorial.setTutorialStep(3)}
+                onNext={() =>
+                    tutorial.setTutorialStep(
+                        (currentStep) => currentStep + 1,
+                    )
+                }
                 onSkip={tutorial.stopTutorial}
                 showTutorial={tutorial.showTutorial}
                 spotRect={tutorial.spotRect}

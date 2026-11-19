@@ -1,11 +1,9 @@
-import { Heart, Info } from "lucide-react";
+import { Info } from "lucide-react";
 
 export default function MotifGrid({
-    favorites,
     motifs,
     onOpenDetails,
     onSelect,
-    onToggleFavorite,
     selectedMotif,
 }) {
     if (motifs.length === 0) {
@@ -30,10 +28,6 @@ export default function MotifGrid({
                             onSelect(motif);
                         }
                     }}
-                    onContextMenu={(event) => {
-                        event.preventDefault();
-                        onToggleFavorite(motif.id, event);
-                    }}
                     className={`relative group flex flex-col items-center p-3 rounded-xl border transition-all ${
                         selectedMotif === motif.id
                             ? "bg-[#142920] border-[#CDB988] shadow-md ring-1 ring-[#CDB988]/30"
@@ -42,14 +36,6 @@ export default function MotifGrid({
                 >
                     <div className="w-14 h-14 rounded-lg bg-[#0E1E18] border border-[#182C24] flex items-center justify-center mb-2 relative overflow-hidden">
                         {motif.svgIcon}
-                        {favorites.includes(motif.id) && (
-                            <div className="absolute top-1 right-1">
-                                <Heart
-                                    size={12}
-                                    className="text-[#E88D8D] fill-current"
-                                />
-                            </div>
-                        )}
                     </div>
                     <span className="text-xs font-medium text-[#E2CEAB] text-center truncate w-full px-1">
                         {motif.name}
@@ -68,28 +54,6 @@ export default function MotifGrid({
                         title="Lihat detail filosofi motif"
                     >
                         <Info size={12} />
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={(event) =>
-                            onToggleFavorite(motif.id, event)
-                        }
-                        className="absolute bottom-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-[#7E9385] hover:text-[#E88D8D]"
-                        title={
-                            favorites.includes(motif.id)
-                                ? "Hapus dari favorit"
-                                : "Tambah ke favorit"
-                        }
-                    >
-                        <Heart
-                            size={12}
-                            className={
-                                favorites.includes(motif.id)
-                                    ? "fill-current text-[#E88D8D]"
-                                    : "text-[#7E9385]"
-                            }
-                        />
                     </button>
                 </div>
             ))}

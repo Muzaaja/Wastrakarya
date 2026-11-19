@@ -9,9 +9,54 @@ export default function HeatingOverlay({ malam, tutorial }) {
         return null;
     }
 
+    const activeStep = malam.isPreparingMalam
+        ? malam.isMalamInPot
+            ? 2
+            : 1
+        : malam.isPouringMalam
+          ? 4
+          : 3;
+    const stageContent = malam.isPreparingMalam
+        ? {
+              eyebrow: malam.isMalamInPot
+                  ? "Babak II · Menyalakan tungku"
+                  : "Babak I · Persiapan malam",
+              icon: Flame,
+              iconClassName: "text-[#F2C879]",
+              title: "Siapkan Malam",
+              description:
+                  "Masukkan malam ke dalam kuali terlebih dahulu, kemudian nyalakan api untuk mulai melelehkannya.",
+          }
+        : malam.isMalamPouringFinished
+          ? {
+                eyebrow: "Adegan akhir · Proses selesai",
+                icon: Check,
+                iconClassName: "text-[#9AD8AE]",
+                title: "Canting Siap Digunakan",
+                description:
+                    "Malam telah selesai dilelehkan dan dimasukkan ke dalam canting.",
+            }
+          : malam.isPouringMalam
+            ? {
+                  eyebrow: "Babak IV · Pengisian canting",
+                  icon: Sparkles,
+                  iconClassName: "text-[#F2C879]",
+                  title: "Mengisi Canting",
+                  description:
+                      "Malam sudah meleleh sempurna dan sedang dituangkan perlahan ke dalam canting.",
+              }
+            : {
+                  eyebrow: "Babak III · Pelelehan malam",
+                  icon: Loader2,
+                  iconClassName: "animate-spin text-[#F2C879]",
+                  title: "Memanaskan Malam",
+                  description: "Tunggu malam sampai meleleh.",
+              };
+    const StageIcon = stageContent.icon;
+
     return (
         <div
-            className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-4 sm:p-8"
+            className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-3 sm:p-6 lg:p-8"
             role="dialog"
             aria-modal="true"
             aria-labelledby="heating-malam-title"
@@ -19,62 +64,32 @@ export default function HeatingOverlay({ malam, tutorial }) {
         >
             <div
                 ref={malam.heatingBackdropRef}
-                className="pointer-events-none fixed inset-0 bg-[#020705]/90"
+                className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_10%,rgba(177,80,35,0.24),transparent_34%),radial-gradient(circle_at_16%_82%,rgba(38,98,72,0.18),transparent_38%),linear-gradient(135deg,rgba(1,6,4,0.97),rgba(3,13,9,0.95)_48%,rgba(10,9,5,0.97))] backdrop-blur-sm"
             />
+            <div className="pointer-events-none fixed left-1/2 top-[-18rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-[#D06D32]/10 blur-[110px]" />
             <div
                 ref={malam.heatingDialogRef}
                 id="tour-malam-card"
-                className="relative z-10 my-auto w-full max-w-2xl transform-gpu overflow-hidden rounded-3xl border border-[#CDB988]/40 bg-[#091611] shadow-[0_30px_100px_rgba(0,0,0,0.75),0_0_80px_rgba(226,139,43,0.08)]"
+                className="relative z-10 my-auto w-full max-w-3xl transform-gpu overflow-hidden rounded-[2rem] border border-[#D7BE84]/30 bg-[linear-gradient(145deg,rgba(13,32,24,0.98)_0%,rgba(5,16,12,0.99)_56%,rgba(17,20,13,0.98)_100%)] shadow-[0_40px_140px_rgba(0,0,0,0.82),0_0_100px_rgba(211,105,43,0.12),inset_0_1px_0_rgba(255,255,255,0.07)] ring-1 ring-inset ring-white/[0.03]"
             >
-                <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#A95325]/15 to-transparent" />
-                <div className="relative flex flex-col items-center px-5 py-7 text-center sm:px-10 sm:py-9">
-                    <div
-                        className={`mb-2 flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
-                            malam.isMalamPouringFinished
-                                ? "border-[#56C87A]/30 bg-[#56C87A]/10 text-[#A8D5BA]"
-                                : "border-[#E2B86B]/25 bg-[#E2B86B]/10 text-[#E2B86B]"
-                        }`}
-                    >
-                        {malam.isPreparingMalam ? (
-                            <Flame size={13} />
-                        ) : malam.isMalamPouringFinished ? (
-                            <Check size={13} strokeWidth={3} />
-                        ) : malam.isPouringMalam ? (
-                            <Sparkles size={13} />
-                        ) : (
-                            <Loader2 size={13} className="animate-spin" />
-                        )}
-                        {malam.isPreparingMalam
-                            ? "Persiapan pemanasan"
-                            : malam.isMalamPouringFinished
-                              ? "Proses selesai"
-                              : malam.isPouringMalam
-                                ? "Pengisian canting"
-                                : "Proses pemanasan"}
-                    </div>
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(ellipse_at_top,rgba(211,105,43,0.2),transparent_68%)]" />
+                <div className="pointer-events-none absolute -right-20 top-20 h-52 w-52 rounded-full bg-[#D2A45D]/[0.06] blur-3xl" />
+                <div className="pointer-events-none absolute -left-24 bottom-10 h-60 w-60 rounded-full bg-[#2D7657]/[0.08] blur-3xl" />
+                <div className="pointer-events-none absolute inset-x-7 top-0 h-px bg-gradient-to-r from-transparent via-[#F0D69B]/70 to-transparent" />
+
+                <div className="relative flex flex-col items-center px-4 py-6 text-center sm:px-8 sm:py-8 lg:px-12">
+
                     <h2
                         id="heating-malam-title"
-                        className="font-heading text-2xl font-bold text-[#F3E5C8] sm:text-3xl"
+                        className="mt-4 font-heading text-3xl font-bold tracking-[-0.02em] text-[#F5E9CF] drop-shadow-[0_4px_24px_rgba(0,0,0,0.65)] sm:text-4xl"
                     >
-                        {malam.isPreparingMalam
-                            ? "Siapkan Malam"
-                            : malam.isMalamPouringFinished
-                              ? "Canting Siap Digunakan"
-                              : malam.isPouringMalam
-                                ? "Mengisi Canting"
-                                : "Memanaskan Malam"}
+                        {stageContent.title}
                     </h2>
                     <p
                         id="heating-malam-description"
-                        className="mt-2 max-w-md text-sm leading-relaxed text-[#9CB0A4]"
+                        className="mt-2 max-w-lg text-xs leading-relaxed text-[#9CB0A4] sm:text-sm"
                     >
-                        {malam.isPreparingMalam
-                            ? "Masukkan malam ke dalam kuali terlebih dahulu, kemudian nyalakan api untuk mulai melelehkannya."
-                            : malam.isMalamPouringFinished
-                              ? "Malam telah selesai dituangkan ke dalam reservoir canting. Tutup popup untuk kembali ke kanvas."
-                              : malam.isPouringMalam
-                                ? "Malam sudah meleleh sempurna dan sedang dituangkan perlahan ke dalam reservoir canting."
-                                : "Malam sedang dilelehkan perlahan hingga mencapai kekentalan yang tepat untuk mengalir melalui canting."}
+                        {stageContent.description}
                     </p>
 
                     <PopupTutorialCard
@@ -98,8 +113,7 @@ export default function HeatingOverlay({ malam, tutorial }) {
 
                     <HeatingScene
                         completeMalamPouring={malam.completeMalamPouring}
-                        handleMalamDragStart={malam.handleMalamDragStart}
-                        handleMalamDrop={malam.handleMalamDrop}
+                        heatingProgress={malam.heatingProgress}
                         isDraggingMalam={malam.isDraggingMalam}
                         isMalamInPot={malam.isMalamInPot}
                         isMalamPouringFinished={
@@ -107,7 +121,6 @@ export default function HeatingOverlay({ malam, tutorial }) {
                         }
                         isPotDragOver={malam.isPotDragOver}
                         isPouringMalam={malam.isPouringMalam}
-                        isPreparingMalam={malam.isPreparingMalam}
                         malamState={malam.malamState}
                         placeMalamInPot={malam.placeMalamInPot}
                         setIsDraggingMalam={malam.setIsDraggingMalam}

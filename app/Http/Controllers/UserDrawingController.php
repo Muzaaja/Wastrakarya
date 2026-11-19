@@ -17,12 +17,31 @@ class UserDrawingController extends Controller
     public function index(): JsonResponse
     {
         $user = Auth::user();
+        $listColumns = [
+            'id',
+            'user_id',
+            'title',
+            'motif',
+            'wax_color',
+            'wax_color_name',
+            'fabric_color',
+            'canting_size',
+            'data_url',
+            'share_type',
+            'share_token',
+            'created_at',
+            'updated_at',
+        ];
 
         // Karya milik pengguna sendiri
-        $ownDrawings = $user->drawings()->get();
+        $ownDrawings = $user->drawings()
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->get($listColumns);
 
         // Karya yang dibagikan khusus ke pengguna ini
         $sharedDrawings = UserDrawing::query()
+            ->select($listColumns)
             ->where('user_id', '!=', $user->id)
             ->where(function ($query) use ($user): void {
                 $query->where('share_type', UserDrawing::SHARE_PUBLIC)
@@ -34,6 +53,8 @@ class UserDrawingController extends Controller
                     });
             })
             ->with('user:id,name,email')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
             ->get();
 
         return response()->json([
@@ -49,8 +70,11 @@ class UserDrawingController extends Controller
             'motif' => ['nullable', 'string', 'max:255'],
             'wax_color' => ['nullable', 'string', 'max:255'],
             'wax_color_name' => ['nullable', 'string', 'max:255'],
-            'canting_size' => ['nullable', 'integer'],
+            'fabric_color' => ['nullable', 'hex_color'],
+            'canting_size' => ['nullable', 'numeric', 'min:0.1', 'max:99.99'],
             'data_url' => ['required', 'string'],
+            'pencil_data_url' => ['nullable', 'string'],
+            'wax_data_url' => ['nullable', 'string'],
             'share_type' => ['nullable', 'string', 'in:private,public,specific_users'],
         ])->validate();
 
@@ -108,11 +132,19 @@ class UserDrawingController extends Controller
             'motif' => ['nullable', 'string', 'max:255'],
             'wax_color' => ['nullable', 'string', 'max:255'],
             'wax_color_name' => ['nullable', 'string', 'max:255'],
-            'canting_size' => ['nullable', 'integer'],
+            'fabric_color' => ['nullable', 'hex_color'],
+            'canting_size' => ['nullable', 'numeric', 'min:0.1', 'max:99.99'],
             'data_url' => ['sometimes', 'required', 'string'],
+            'pencil_data_url' => ['nullable', 'string'],
+            'wax_data_url' => ['nullable', 'string'],
         ];
 
         $validated = Validator::make($request->all(), $rules)->validate();
+
+        if (array_key_exists('data_url', $validated)) {
+            $validated['pencil_data_url'] = $validated['pencil_data_url'] ?? null;
+            $validated['wax_data_url'] = $validated['wax_data_url'] ?? null;
+        }
 
         $drawing->update($validated);
 
@@ -363,8 +395,11 @@ class UserDrawingController extends Controller
             'motif' => $drawing->motif,
             'wax_color' => $drawing->wax_color,
             'wax_color_name' => $drawing->wax_color_name,
+            'fabric_color' => $drawing->fabric_color,
             'canting_size' => $drawing->canting_size,
             'data_url' => $drawing->data_url,
+            'pencil_data_url' => $drawing->pencil_data_url,
+            'wax_data_url' => $drawing->wax_data_url,
             'share_type' => $drawing->share_type ?? UserDrawing::SHARE_PRIVATE,
             'share_token' => $drawing->share_token,
             'share_url' => url('/canvas/'.$drawing->id),

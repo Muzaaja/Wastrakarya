@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const ANIMATION_DURATION_SECONDS = 3;
@@ -82,29 +81,11 @@ export default function MalamPouring3D({ waxColor, onComplete }) {
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.1;
         renderer.shadowMap.enabled = false;
+        renderer.domElement.setAttribute("aria-hidden", "true");
+        renderer.domElement.style.height = "100%";
+        renderer.domElement.style.pointerEvents = "none";
+        renderer.domElement.style.width = "100%";
         container.appendChild(renderer.domElement);
-
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.06;
-        controls.enableZoom = false;
-        controls.enablePan = false;
-        controls.rotateSpeed = 0.65;
-        controls.minPolarAngle = Math.PI / 3;
-        controls.maxPolarAngle = Math.PI / 2 + 0.12;
-        controls.target.set(0, -0.25, 0);
-        controls.update();
-
-        const showGrabCursor = () => {
-            renderer.domElement.style.cursor = "grab";
-        };
-        const showGrabbingCursor = () => {
-            renderer.domElement.style.cursor = "grabbing";
-        };
-
-        showGrabCursor();
-        controls.addEventListener("start", showGrabbingCursor);
-        controls.addEventListener("end", showGrabCursor);
 
         scene.add(new THREE.AmbientLight(0xd8e3da, 1.35));
 
@@ -320,7 +301,6 @@ export default function MalamPouring3D({ waxColor, onComplete }) {
                 if (progress >= 1) finishAnimation();
             }
 
-            controls.update();
             renderer.render(scene, camera);
             animationFrameId = requestAnimationFrame(animate);
         };
@@ -406,9 +386,6 @@ export default function MalamPouring3D({ waxColor, onComplete }) {
             disposableGeometries.forEach((geometry) => geometry.dispose());
             disposableMaterials.forEach((material) => material.dispose());
             modelMaterials.forEach((material) => material.dispose());
-            controls.removeEventListener("start", showGrabbingCursor);
-            controls.removeEventListener("end", showGrabCursor);
-            controls.dispose();
             renderer.dispose();
         };
     }, [onComplete, waxColor]);
@@ -416,8 +393,7 @@ export default function MalamPouring3D({ waxColor, onComplete }) {
     return (
         <div
             ref={mountRef}
-            className="absolute inset-0 cursor-grab overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_50%_40%,rgba(226,184,107,0.12),transparent_68%)] active:cursor-grabbing"
-            title="Seret untuk memutar animasi 3D"
+            className="absolute inset-0 overflow-hidden rounded-[inherit] bg-[radial-gradient(circle_at_50%_40%,rgba(226,184,107,0.12),transparent_68%)]"
         >
             {isLoading && (
                 <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#07130E] text-xs font-semibold text-[#CDB988]">

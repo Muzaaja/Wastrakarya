@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef } from "react";
 import { renderDottedGuide } from "../BatikMotifs";
 import {
+    clearCanvas,
+    loadCanvasDataUrl,
+    splitLegacyArtwork,
+} from "../canvasPixels";
+import {
     CANVAS_HEIGHT,
     CANVAS_TILE_SIZE,
     CANVAS_WIDTH,
 } from "../constants";
 
 export default function useCanvasRenderer({
+    fabricColor,
     guideOpacity,
     pan,
     selectedMotif,
@@ -16,20 +22,71 @@ export default function useCanvasRenderer({
 }) {
     const canvasRef = useRef(null);
     const artworkCanvasRef = useRef(null);
+    const pencilCanvasRef = useRef(null);
+    const waxCanvasRef = useRef(null);
     const canvasBaseLayerRef = useRef(null);
     const canvasBaseLayerKeyRef = useRef("");
     const renderFrameRef = useRef(null);
 
-    const getArtworkCanvas = useCallback(() => {
-        if (!artworkCanvasRef.current) {
+    const getLayerCanvas = useCallback((canvasRef) => {
+        if (!canvasRef.current) {
             const canvas = document.createElement("canvas");
             canvas.width = CANVAS_WIDTH;
             canvas.height = CANVAS_HEIGHT;
-            artworkCanvasRef.current = canvas;
+            canvasRef.current = canvas;
         }
 
-        return artworkCanvasRef.current;
+        return canvasRef.current;
     }, []);
+
+    const getPencilCanvas = useCallback(
+        () => getLayerCanvas(pencilCanvasRef),
+        [getLayerCanvas],
+    );
+
+    const getWaxCanvas = useCallback(
+        () => getLayerCanvas(waxCanvasRef),
+        [getLayerCanvas],
+    );
+
+    const getArtworkCanvas = useCallback(() => {
+        const artwork = getLayerCanvas(artworkCanvasRef);
+        const context = artwork.getContext("2d");
+        context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        context.drawImage(getPencilCanvas(), 0, 0);
+        context.drawImage(getWaxCanvas(), 0, 0);
+
+        return artwork;
+    }, [getLayerCanvas, getPencilCanvas, getWaxCanvas]);
+
+    const loadArtworkLayers = useCallback(
+        async ({ compositeDataUrl, pencilDataUrl, waxDataUrl }) => {
+            const pencilCanvas = getPencilCanvas();
+            const waxCanvas = getWaxCanvas();
+
+            clearCanvas(pencilCanvas);
+            clearCanvas(waxCanvas);
+
+            if (pencilDataUrl || waxDataUrl) {
+                await Promise.all([
+                    loadCanvasDataUrl(pencilCanvas, pencilDataUrl),
+                    loadCanvasDataUrl(waxCanvas, waxDataUrl),
+                ]);
+                return;
+            }
+
+            if (!compositeDataUrl) {
+                return;
+            }
+
+            const legacyCanvas = document.createElement("canvas");
+            legacyCanvas.width = CANVAS_WIDTH;
+            legacyCanvas.height = CANVAS_HEIGHT;
+            await loadCanvasDataUrl(legacyCanvas, compositeDataUrl);
+            splitLegacyArtwork(legacyCanvas, pencilCanvas, waxCanvas);
+        },
+        [getPencilCanvas, getWaxCanvas],
+    );
 
     const getCanvasBaseLayer = useCallback(() => {
         if (!canvasBaseLayerRef.current) {
@@ -47,6 +104,7 @@ export default function useCanvasRenderer({
             selectedMotif,
             guideOpacity,
             showTileGrid,
+            fabricColor,
         ].join(":");
 
         if (canvasBaseLayerKeyRef.current === cacheKey) {
@@ -56,7 +114,7 @@ export default function useCanvasRenderer({
         const context = baseLayer.getContext("2d");
         context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        context.fillStyle = "#F5EFEB";
+        context.fillStyle = fabricColor;
         context.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
         context.fillStyle = "rgba(0, 0, 0, 0.012)";
@@ -115,7 +173,13 @@ export default function useCanvasRenderer({
         canvasBaseLayerKeyRef.current = cacheKey;
 
         return baseLayer;
-    }, [guideOpacity, selectedMotif, showGuide, showTileGrid]);
+    }, [
+        fabricColor,
+        guideOpacity,
+        selectedMotif,
+        showGuide,
+        showTileGrid,
+    ]);
 
     const renderMainCanvas = useCallback(() => {
         const canvas = canvasRef.current;
@@ -124,7 +188,8 @@ export default function useCanvasRenderer({
         }
 
         const context = canvas.getContext("2d");
-        const artwork = getArtworkCanvas();
+        const pencil = getPencilCanvas();
+        const wax = getWaxCanvas();
         const baseLayer = getCanvasBaseLayer();
 
         context.clearRect(0, 0, canvas.width, canvas.height);
@@ -136,9 +201,10 @@ export default function useCanvasRenderer({
         context.rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         context.clip();
         context.drawImage(baseLayer, 0, 0);
-        context.drawImage(artwork, 0, 0);
+        context.drawImage(pencil, 0, 0);
+        context.drawImage(wax, 0, 0);
         context.restore();
-    }, [getArtworkCanvas, getCanvasBaseLayer, pan, zoom]);
+    }, [getCanvasBaseLayer, getPencilCanvas, getWaxCanvas, pan, zoom]);
 
     const renderMainCanvasRef = useRef(renderMainCanvas);
     useEffect(() => {
@@ -173,6 +239,9 @@ export default function useCanvasRenderer({
         canvasRef,
         canvasWidth: CANVAS_WIDTH,
         getArtworkCanvas,
+        getPencilCanvas,
+        getWaxCanvas,
+        loadArtworkLayers,
         renderMainCanvas,
         renderMainCanvasRef,
         scheduleMainCanvasRender,

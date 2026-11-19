@@ -1,5 +1,6 @@
 import { Link } from "@inertiajs/react";
 import {
+    CopyPlus,
     Crown,
     HelpCircle,
     Layers,
@@ -11,6 +12,7 @@ import {
 export default function StudioHeader({
     activeCollaborators,
     canvasOwner,
+    canSaveAs,
     hasActiveSubscription,
     hasUnsavedChanges,
     isEditingTitle,
@@ -18,6 +20,7 @@ export default function StudioHeader({
     onOpenShare,
     onOpenThreeDimensionalMockup,
     onSave,
+    onSaveAs,
     onStartTutorial,
     onTitleChange,
     onTitleCommit,
@@ -183,6 +186,17 @@ export default function StudioHeader({
                     <HelpCircle size={15} className="text-[#CDB988]" />
                     <span>Bantuan</span>
                 </button>
+                {isOwner && canSaveAs && (
+                    <button
+                        type="button"
+                        onClick={onSaveAs}
+                        title="Buat salinan baru tanpa menimpa karya ini"
+                        className="bg-[#142920] hover:bg-[#1E3B2E] border border-[#CDB988]/50 hover:border-[#CDB988] text-[#E2CEAB] font-semibold text-xs px-3.5 py-2.5 rounded-xl shadow-sm transition-all duration-150 flex items-center gap-2 active:scale-95"
+                    >
+                        <CopyPlus size={15} className="text-[#CDB988]" />
+                        <span>Simpan Sebagai</span>
+                    </button>
+                )}
                 {isOwner && (
                     <button
                         type="button"

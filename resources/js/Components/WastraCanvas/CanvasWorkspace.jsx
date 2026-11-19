@@ -1,3 +1,4 @@
+import { Droplets } from "lucide-react";
 import CanvasSurface from "./CanvasSurface";
 import CanvasToolbar from "./CanvasToolbar";
 
@@ -5,6 +6,7 @@ export default function CanvasWorkspace({
     canvas,
     collaboration,
     drawing,
+    dyeing,
     history,
     malam,
     menu,
@@ -13,7 +15,7 @@ export default function CanvasWorkspace({
     return (
         <main
             id="tour-canvas"
-            className="flex-1 flex flex-col bg-[#08140F] border border-[#182C24] rounded-2xl p-3 shadow-xl overflow-hidden relative"
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#182C24] bg-[#08140F] p-3 shadow-xl"
             onPointerDown={drawing.onContainerPointerDown}
         >
             <CanvasToolbar
@@ -49,7 +51,7 @@ export default function CanvasWorkspace({
                 zoom={viewport.zoom}
             />
 
-            <div className="h-10 px-3 bg-[#0B1712] border-t border-[#182C24] flex items-center justify-between text-xs text-[#7E9385] shrink-0">
+            <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-t border-[#182C24] bg-[#0B1712] px-3 text-xs text-[#7E9385]">
                 <div className="flex items-center gap-3">
                     <span className="font-mono text-[#9CB0A4]">
                         {Math.round(canvas.canvasWidth / 8)} ×{" "}
@@ -60,6 +62,20 @@ export default function CanvasWorkspace({
                         {canvas.canvasWidth}×{canvas.canvasHeight}
                     </span>
                 </div>
+                <button
+                    id="tour-dyeing"
+                    type="button"
+                    onClick={dyeing.onStart}
+                    className="flex h-7 items-center gap-2 rounded-full border border-[#6FA6B2]/35 bg-[#315B74]/15 px-3 font-semibold text-[#A7D0D6] transition-all hover:border-[#8CC6D3]/70 hover:bg-[#315B74]/30 hover:text-[#DCECEF] active:scale-[0.98]"
+                    title="Mulai proses pencelupan kain (Ngelir)"
+                >
+                    <span
+                        className="h-3 w-3 rounded-full border border-white/20"
+                        style={{ backgroundColor: dyeing.color }}
+                    />
+                    <Droplets size={13} />
+                    <span className="hidden sm:inline">Ngelir</span>
+                </button>
             </div>
         </main>
     );

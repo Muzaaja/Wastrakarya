@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
-#[Fillable(['user_id', 'title', 'motif', 'wax_color', 'wax_color_name', 'canting_size', 'data_url', 'share_type', 'share_token'])]
+#[Fillable(['user_id', 'title', 'motif', 'wax_color', 'wax_color_name', 'fabric_color', 'canting_size', 'data_url', 'pencil_data_url', 'wax_data_url', 'share_type', 'share_token'])]
 class UserDrawing extends Model
 {
     /** @use HasFactory<UserDrawingFactory> */
@@ -23,7 +23,7 @@ class UserDrawing extends Model
     public const SHARE_SPECIFIC = 'specific_users';
 
     protected $casts = [
-        'canting_size' => 'integer',
+        'canting_size' => 'float',
     ];
 
     /**

@@ -280,8 +280,9 @@ export function createDefaultKawungPicisTexture() {
 /**
  * Membuat Tekstur dari Desain Kanvas yang Dilukis Pengguna
  * @param {string} tileDataUrl - Data URL dari tile canvas pengguna
+ * @param {string|null} fabricColor - Warna kain hasil proses Ngelir
  */
-export function createCustomBatikTexture(tileDataUrl, callback) {
+export function createCustomBatikTexture(tileDataUrl, fabricColor, callback) {
     if (!tileDataUrl) return;
 
     const img = new Image();
@@ -291,8 +292,8 @@ export function createCustomBatikTexture(tileDataUrl, callback) {
         canvas.height = 1024;
         const ctx = canvas.getContext('2d');
 
-        // Latar kain mori lembut
-        ctx.fillStyle = '#F5EFEB';
+        // Latar kain mengikuti warna hasil Ngelir, dengan mori sebagai fallback
+        ctx.fillStyle = fabricColor || '#F5EFEB';
         ctx.fillRect(0, 0, 1024, 1024);
 
         // Pattern repeat dari ubin lukisan pengguna

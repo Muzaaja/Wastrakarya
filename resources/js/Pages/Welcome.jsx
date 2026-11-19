@@ -1,5 +1,6 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { ArrowRight, Plus } from 'lucide-react';
+import { useState } from 'react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
 import DesignCard from '@/Components/Wastrakarya/DesignCard';
@@ -8,6 +9,30 @@ import Shirt3DViewer from '@/Components/WastraMockup/Shirt3DViewer';
 export default function Welcome({ drawings = [] }) {
    const { auth } = usePage().props;
    const isLoggedIn = !!auth.user;
+
+   const [confirmDelete, setConfirmDelete] = useState(null); // { id, title }
+
+   function getCsrfToken() {
+       return document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='))?.split('=')[1];
+   }
+
+   function handleRename(drawingId, newTitle) {
+       fetch(`/api/user-drawings/${drawingId}`, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken() ?? '') },
+           body: JSON.stringify({ title: newTitle }),
+       }).then(() => router.reload({ only: ['drawings'] }));
+   }
+
+   function handleDelete(drawingId) {
+       fetch(`/api/user-drawings/${drawingId}`, {
+           method: 'DELETE',
+           headers: { 'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken() ?? '') },
+       }).then(() => {
+           setConfirmDelete(null);
+           router.reload({ only: ['drawings'] });
+       });
+   }
 
    const getGreeting = () => {
     const hour = new Date().getHours();
@@ -155,23 +180,24 @@ export default function Welcome({ drawings = [] }) {
                 <section className='flex flex-col gap-10 min-h-screen py-[140px] max-md:py-[100px] justify-start px-[85px] max-md:px-6 w-full'>
                     <div className='flex max-md:flex-col justify-center text-center max-md:gap-10 gap-9 w-full'>
                         <div className='flex flex-col gap-4'>
-                            <h1 className='text-primary text-7xl max-md:text-[50px] max-md:leading-[60px] leading-[70px] font-heading text-start font-semibold'>
+                            <h1 className='text-primary text-7xl text-center max-md:text-[50px] max-md:leading-[60px] leading-[70px] font-heading font-semibold'>
                                 {getGreeting()}, {auth.user.name}!
                             </h1>
                             <p className='text-white/80 text-[24px] max-md:text-[18px]'>Mau desain apa hari ini?</p>
                         </div>
+                    </div>
+                    <div className='flex max-md:flex-col w-full items-start gap-6 max-md:items-center mt-8 justify-between'>
+                        <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
                         <div className='w-fit'>
                             <Link href="/canvas" 
-                            className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
-                            border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
-                            transition-all duration-200 hover:text-primary">
-                            <Plus />
-                            Buat Desain Baru
-                        </Link>
+                                className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
+                                border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
+                                transition-all duration-200 hover:text-primary">
+                                <Plus />
+                                Buat Desain Baru
+                            </Link>
                         </div>
                     </div>
-                    <div className='h-px w-full bg-white/20'></div>
-                    <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
                     {drawings.length > 0 ? (
                         <div className='grid gap-4 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
                             {drawings.map((drawing) => (
@@ -181,13 +207,53 @@ export default function Welcome({ drawings = [] }) {
                                     lastEdited={drawing.updated_at ? `Diedit ${new Date(drawing.updated_at).toLocaleString('id-ID')}` : undefined}
                                     thumbnailUrl={drawing.data_url || null}
                                     onClick={() => router.visit(`/canvas/${drawing.id}`)}
+                                    onRename={(newTitle) => handleRename(drawing.id, newTitle)}
+                                    onDelete={() => setConfirmDelete({ id: drawing.id, title: drawing.title || drawing.motif || 'Desain Wastrakarya' })}
                                 />
                             ))}
                         </div>
                     ) : (
-                        <p className='text-white/70 text-lg'>Belum ada desain tersimpan.</p>
+                        <p className='text-white/70 text-lg w-full text-center'>Belum ada desain tersimpan.</p>
                     )}
                 </section>
+                <div className='flex flex-col w-full bg-background'>
+                    <img src="ombak.svg" alt="" />
+                    <Footer />
+                </div>
+
+                {/* Modal konfirmasi hapus */}
+                {confirmDelete && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                        onClick={() => setConfirmDelete(null)}
+                    >
+                        <div
+                            className="w-full max-w-sm rounded-2xl bg-[#1e1f21] p-6 shadow-2xl ring-1 ring-white/10"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <h3 className="mb-2 text-lg font-semibold text-white">Hapus Desain?</h3>
+                            <p className="mb-6 text-sm text-gray-400">
+                                Desain <span className="font-medium text-white">"{confirmDelete.title}"</span> akan dihapus permanen dan tidak bisa dikembalikan.
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setConfirmDelete(null)}
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-white/10"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDelete(confirmDelete.id)}
+                                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                                >
+                                    Hapus
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </>
         )}
         

@@ -338,13 +338,15 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                             {classrooms.length > 0 ? (
                                 <div className="grid grid-cols-3 gap-4">
                                     {classrooms.map((cls) => (
-                                        <div key={cls.id} className="p-4 rounded-xl bg-[#252627] text-white flex flex-col gap-2">
-                                            <h4 className="font-semibold text-lg">{cls.name}</h4>
-                                            <span className="text-xs text-primary bg-primary/10 w-fit px-2 py-1 rounded">
+                                        <Link key={cls.id} 
+                                        href={`/classroom/${cls.code}`}
+                                        className="p-6 rounded-xl bg-[#252627] text-white flex flex-col gap-2 border-2 border-transparent hover:border-primary duration-200 transition-all">
+                                            <h4 className="font-semibold text-xl">{cls.name}</h4>
+                                            <span className="text-md text-primary bg-primary/10 w-fit px-2 py-1 rounded">
                                                 Kode: {cls.code}
                                             </span>
-                                        </div>
-                                    ))}
+                                        </Link>
+                            ))}
                                 </div>
                             ) : (
                                 <p className="text-white/80 text-lg text-center py-8">Kamu belum bergabung ke kelas manapun.</p>

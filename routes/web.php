@@ -33,8 +33,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
     Route::post('/classrooms', [ClassroomController::class, 'store'])->name('classrooms.store');
     Route::post('/classrooms/join', [ClassroomController::class, 'join'])->name('classrooms.join');
+    Route::get('/classroom/{code}', [ClassroomController::class, 'show'])->name('classroom.show');
+    Route::delete('/classroom/{code}', [ClassroomController::class, 'destroy'])->name('classroom.destroy');
+    Route::post('/classroom/{code}/drawings', [ClassroomController::class, 'createDrawing'])->name('classroom.drawings.store');
 });
 
 Route::get('/canvas', [CanvasController::class, 'index'])->name('canvas');

@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function useToast() {
-    const [toastMessage, setToastMessage] = useState(null);
+    const [toast, setToast] = useState({ message: null, type: "info" });
     const toastTimerRef = useRef(null);
 
-    const showToast = useCallback((message) => {
+    const showToast = useCallback((message, type = "info") => {
         if (toastTimerRef.current) {
             window.clearTimeout(toastTimerRef.current);
         }
 
-        setToastMessage(message);
+        setToast({ message, type });
         toastTimerRef.current = window.setTimeout(() => {
-            setToastMessage(null);
+            setToast({ message: null, type: "info" });
             toastTimerRef.current = null;
         }, 3000);
     }, []);
@@ -24,5 +24,9 @@ export default function useToast() {
         };
     }, []);
 
-    return { toastMessage, showToast };
+    return { 
+        toastMessage: toast.message, 
+        toastType: toast.type, 
+        showToast 
+    };
 }

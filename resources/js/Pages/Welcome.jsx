@@ -5,12 +5,19 @@ import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
 import DesignCard from '@/Components/Wastrakarya/DesignCard';
 import Shirt3DViewer from '@/Components/WastraMockup/Shirt3DViewer';
+import ToastNotification from '@/Components/WastraCanvas/ToastNotification';
+import useToast from '@/Components/WastraCanvas/hooks/useToast';
 
-export default function Welcome({ drawings = [] }) {
+export default function Welcome({ drawings = [], classrooms = [] }) {
    const { auth } = usePage().props;
    const isLoggedIn = !!auth.user;
 
    const [confirmDelete, setConfirmDelete] = useState(null); // { id, title }
+   const [activeTab, setActiveTab] = useState('personal');
+
+   const [classCode, setClassCode] = useState('');
+   const [isJoining, setIsJoining] = useState(false);
+   const { toastMessage, toastType, showToast } = useToast();
 
    function getCsrfToken() {
        return document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='))?.split('=')[1];
@@ -33,6 +40,27 @@ export default function Welcome({ drawings = [] }) {
            router.reload({ only: ['drawings'] });
        });
    }
+   
+   function handleJoinClass(e) {
+    e.preventDefault();
+    if (!classCode.trim()) return;
+
+    setIsJoining(true);
+
+    router.post('/classrooms/join', { code: classCode }, {
+        preserveScroll: true,
+        onError: (errors) => {
+            showToast(errors.code || 'Kode kelas tidak valid.', 'error');
+        },
+        onSuccess: () => {
+            setClassCode('');
+            showToast('Berhasil bergabung ke kelas!', 'info');
+        },
+        onFinish: () => {
+            setIsJoining(false);
+        },
+    });
+   }
 
    const getGreeting = () => {
     const hour = new Date().getHours();
@@ -50,6 +78,7 @@ export default function Welcome({ drawings = [] }) {
 
    return (
     <div className='flex flex-col bg-background w-full items-center overflow-x-hidden'>
+        <ToastNotification message={toastMessage} type={toastType} />
         <Navbar />
         {!isLoggedIn ? (
             <>
@@ -184,38 +213,119 @@ export default function Welcome({ drawings = [] }) {
                                 {getGreeting()}, {auth.user.name}!
                             </h1>
                             <p className='text-white/80 text-[24px] max-md:text-[18px]'>Mau desain apa hari ini?</p>
+                            <div className='flex gap-3 w-full items-center justify-center mt-3'>
+                                <button 
+                                    type='button'
+                                    onClick={() => setActiveTab('personal')}
+                                    className={`${activeTab == 'personal' 
+                                        ? 'bg-primary text-background hover:bg-transparent border-2 border-transparent hover:border-primary hover:text-primary' :
+                                        'hover:bg-primary hover:text-background border-2 border-primary text-primary'} flex gap-2 justify-between px-4 items-center text-lg max-md:text-[16px] max-md:px-3 max-md:py-2 py-2.5 rounded-[12px] font-semibold transition-all duration-200`}>
+                                    Desain Anda
+                                </button>  
+
+                                <button 
+                                    type='button'
+                                    onClick={() => setActiveTab('classroom')} 
+                                    className={`${activeTab == 'classroom' 
+                                        ? 'bg-primary text-background hover:bg-transparent border-2 border-transparent hover:border-primary hover:text-primary' :
+                                        'hover:bg-primary hover:text-background border-2 border-primary text-primary'} flex gap-2 justify-between px-4 items-center text-lg max-md:text-[16px] max-md:px-3 max-md:py-2 py-2.5 rounded-[12px] font-semibold transition-all duration-200`}>
+                                    Ruang Kelas
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <div className='flex max-md:flex-col w-full items-start gap-6 max-md:items-center mt-8 justify-between'>
-                        <span className='font-semibold text-primary text-3xl'>Lanjutkan Mendesain</span>
-                        <div className='w-fit'>
-                            <Link href="/canvas" 
-                                className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
-                                border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
-                                transition-all duration-200 hover:text-primary">
-                                <Plus />
-                                Buat Desain Baru
-                            </Link>
+
+                    {activeTab == 'personal' ? (
+                        <>
+                        <div className='flex max-md:flex-col w-full items-start gap-6 max-md:items-center mt-8 justify-between'>
+                            <span className='font-semibold text-primary text-3xl'>
+                                Lanjutkan Mendesain
+                            </span>
+                            <div className='w-fit'>
+                                <Link href="/canvas" 
+                                    className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
+                                    border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
+                                    transition-all duration-200 hover:text-primary">
+                                    <Plus />
+                                    Buat Desain Baru
+                                </Link>
+                            </div>
                         </div>
-                    </div>
-                    {drawings.length > 0 ? (
-                        <div className='grid gap-4 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
-                            {drawings.map((drawing) => (
-                                <DesignCard
-                                    key={drawing.id}
-                                    title={drawing.title || drawing.motif || 'Desain Wastrakarya'}
-                                    lastEdited={drawing.updated_at ? `Diedit ${new Date(drawing.updated_at).toLocaleString('id-ID')}` : undefined}
-                                    thumbnailUrl={drawing.data_url || null}
-                                    onClick={() => router.visit(`/canvas/${drawing.id}`)}
-                                    onRename={(newTitle) => handleRename(drawing.id, newTitle)}
-                                    onDelete={() => setConfirmDelete({ id: drawing.id, title: drawing.title || drawing.motif || 'Desain Wastrakarya' })}
-                                />
-                            ))}
-                        </div>
+                        {drawings.length > 0 ? (
+                            <div className='grid gap-4 w-full grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1'>
+                                {drawings.map((drawing) => (
+                                    <DesignCard
+                                        key={drawing.id}
+                                        title={drawing.title || drawing.motif || 'Desain Wastrakarya'}
+                                        lastEdited={drawing.updated_at ? `Diedit ${new Date(drawing.updated_at).toLocaleString('id-ID')}` : undefined}
+                                        thumbnailUrl={drawing.data_url || null}
+                                        onClick={() => router.visit(`/canvas/${drawing.id}`)}
+                                        onRename={(newTitle) => handleRename(drawing.id, newTitle)}
+                                        onDelete={() => setConfirmDelete({ id: drawing.id, title: drawing.title || drawing.motif || 'Desain Wastrakarya' })}
+                                    />
+                                ))}
+                            </div>
+                            ) : (
+                                <p className='text-white/70 text-lg w-full text-center'>Belum ada desain tersimpan.</p>
+                            )}
+                        </>
                     ) : (
-                        <p className='text-white/70 text-lg w-full text-center'>Belum ada desain tersimpan.</p>
+                        <>
+                            <div className='flex max-md:flex-col w-full items-start gap-6 max-md:items-center mt-8 justify-between'>
+                                <span className='font-semibold text-primary text-3xl'>
+                                    Ruang Kelas Anda
+                                </span>
+                                <div className='w-fit flex gap-4 items-center'>
+                                    <form onSubmit={handleJoinClass} className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Masukkan Kode Kelas"
+                                            value={classCode}
+                                            disabled={isJoining}
+                                            onChange={(e) => setClassCode(e.target.value)}
+                                            className="rounded-lg bg-transparent px-4 py-2 text-white/90 border border-white/20 focus:border-primary focus:ring-1 focus:ring-primary uppercase text-md outline-none transition-colors"
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={isJoining || !classCode.trim()}
+                                            className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
+                                            border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
+                                            transition-all duration-200 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isJoining ? 'Memeriksa...' : 'Gabung'}
+                                        </button>
+                                    </form>
+
+                                    <span className='text-white/70 text-lg'>atau</span>
+
+                                    <Link href="/canvas" 
+                                        className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
+                                        border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
+                                        transition-all duration-200 hover:text-primary">
+                                        <Plus />
+                                        Buat Kelas
+                                    </Link>
+                                </div>
+                            </div>
+
+                            {classrooms.length > 0 ? (
+                                <div className="grid grid-cols-3 gap-4">
+                                    {classrooms.map((cls) => (
+                                        <div key={cls.id} className="p-4 rounded-xl bg-[#252627] text-white flex flex-col gap-2">
+                                            <h4 className="font-semibold text-lg">{cls.name}</h4>
+                                            <span className="text-xs text-primary bg-primary/10 w-fit px-2 py-1 rounded">
+                                                Kode: {cls.code}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-white/80 text-lg text-center py-8">Kamu belum bergabung ke kelas manapun.</p>
+                            )}
+                        </>
                     )}
                 </section>
+
                 <div className='flex flex-col w-full bg-background'>
                     <img src="ombak.svg" alt="" />
                     <Footer />

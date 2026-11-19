@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CanvasController;
+use App\Http\Controllers\ClassroomController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserDrawingController;
 use Illuminate\Foundation\Application;
@@ -17,6 +18,9 @@ Route::get('/', function (Request $request) {
         'drawings' => $request->user()
             ? $request->user()->drawings()->latest()->get(['id', 'title', 'motif', 'data_url', 'updated_at'])
             : [],
+        'classrooms' => $request->user()
+            ? $request->user()->classrooms()->latest()->get()
+            : [],
     ]);
 });
 
@@ -28,6 +32,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::post('/classrooms', [ClassroomController::class, 'store'])->name('classrooms.store');
+    Route::post('/classrooms/join', [ClassroomController::class, 'join'])->name('classrooms.join');
 });
 
 Route::get('/canvas', [CanvasController::class, 'index'])->name('canvas');

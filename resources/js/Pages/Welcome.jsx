@@ -7,6 +7,7 @@ import DesignCard from '@/Components/Wastrakarya/DesignCard';
 import Shirt3DViewer from '@/Components/WastraMockup/Shirt3DViewer';
 import ToastNotification from '@/Components/WastraCanvas/ToastNotification';
 import useToast from '@/Components/WastraCanvas/hooks/useToast';
+import { error } from 'three';
 
 export default function Welcome({ drawings = [], classrooms = [] }) {
    const { auth } = usePage().props;
@@ -17,6 +18,9 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
 
    const [classCode, setClassCode] = useState('');
    const [isJoining, setIsJoining] = useState(false);
+   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+   const [newClassName, setNewClassName] = useState('');
+   const [isCreating, setIsCreating] = useState(false);
    const { toastMessage, toastType, showToast } = useToast();
 
    function getCsrfToken() {
@@ -58,6 +62,28 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
         },
         onFinish: () => {
             setIsJoining(false);
+        },
+    });
+   }
+
+   function handleCreateClass(e) {
+    e.preventDefault();
+    if (!newClassName.trim()) return;
+
+    setIsCreating(true);
+
+    router.post('classrooms', { name: newClassName}, {
+        preserveScroll:true,
+        onSuccess: () => {
+            setNewClassName('');
+            setIsCreateModalOpen(false);
+            showToast('Kelas berhasil dibuat!', 'info');
+        },
+        onError: (errors) => {
+            showToast(errors.name || 'Gagal membuat kelas.', 'error');
+        },
+        onFinish: () => {
+            setIsCreating(false);
         },
     });
    }
@@ -298,13 +324,14 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
 
                                     <span className='text-white/70 text-lg'>atau</span>
 
-                                    <Link href="/canvas" 
+                                    <button type='button'
+                                        onClick={() => setIsCreateModalOpen(true)} 
                                         className="flex gap-2 justify-between items-center text-xl max-md:text-lg bg-primary text-background hover:bg-transparent 
                                         border-2 border-transparent hover:border-primary px-6 max-md:px-4 max-md:py-2.5 py-3.5 rounded-[12px] font-semibold 
                                         transition-all duration-200 hover:text-primary">
                                         <Plus />
                                         Buat Kelas
-                                    </Link>
+                                    </button>
                                 </div>
                             </div>
 
@@ -330,6 +357,56 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                     <img src="ombak.svg" alt="" />
                     <Footer />
                 </div>
+
+                {/* Modal Buat Kelas Baru */}
+                {isCreateModalOpen && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                        onClick={() => setIsCreateModalOpen(false)}
+                    >
+                        <div
+                            className="w-full max-w-md rounded-2xl bg-[#1e1f21] p-6 shadow-2xl ring-1 ring-white/10"
+                            onClick={(e) => e.stopPropagation()} // Mencegah modal tertutup saat diklik di dalam kotak
+                        >
+                            <h3 className="mb-2 text-xl font-semibold text-white">Buat Kelas Baru</h3>
+                            <p className="mb-4 text-md text-gray-400">
+                                Masukkan nama kelas untuk mulai mengajak siswa atau rekan belajar mendesain bersama.
+                            </p>
+                            <form onSubmit={handleCreateClass} className="flex flex-col gap-4">
+                                <div>
+                                    <label className="text-lg text-gray-300 font-medium mb-1 block">
+                                        Nama Kelas
+                                    </label>
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        placeholder="Contoh: Batik Nusantara XII-RPL"
+                                        value={newClassName}
+                                        disabled={isCreating}
+                                        onChange={(e) => setNewClassName(e.target.value)}
+                                        className="w-full rounded-lg bg-white/5 border border-white/10 px-4 py-2.5 text-white outline-none focus:border-primary focus:ring-1 focus:ring-primary text-lg"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3 mt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCreateModalOpen(false)}
+                                        className="rounded-lg px-4 py-2 text-lg font-medium text-gray-300 transition-colors hover:bg-white/10"
+                                    >
+                                        Batal
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isCreating || !newClassName.trim()}
+                                        className="rounded-lg bg-primary px-5 py-2 text-lg font-semibold text-background transition-colors hover:opacity-90 disabled:opacity-50"
+                                    >
+                                        {isCreating ? 'Menyimpan...' : 'Buat Kelas'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
 
                 {confirmDelete && (
                     <div

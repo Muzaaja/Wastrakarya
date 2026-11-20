@@ -22,6 +22,7 @@ class UserDrawingController extends Controller
             'user_id',
             'title',
             'motif',
+            'tile_free_drawing',
             'wax_color',
             'wax_color_name',
             'fabric_color',
@@ -68,6 +69,7 @@ class UserDrawingController extends Controller
         $validated = Validator::make($request->all(), [
             'title' => ['required', 'string', 'max:255'],
             'motif' => ['nullable', 'string', 'max:255'],
+            'tile_free_drawing' => ['nullable', 'boolean'],
             'wax_color' => ['nullable', 'string', 'max:255'],
             'wax_color_name' => ['nullable', 'string', 'max:255'],
             'fabric_color' => ['nullable', 'hex_color'],
@@ -79,6 +81,7 @@ class UserDrawingController extends Controller
         ])->validate();
 
         $validated['share_type'] = $validated['share_type'] ?? UserDrawing::SHARE_PRIVATE;
+        $validated['tile_free_drawing'] = $validated['tile_free_drawing'] ?? false;
         $validated['share_token'] = Str::random(32);
 
         $drawing = Auth::user()->drawings()->create($validated);
@@ -130,6 +133,7 @@ class UserDrawingController extends Controller
         $rules = [
             'title' => ['sometimes', 'required', 'string', 'max:255'],
             'motif' => ['nullable', 'string', 'max:255'],
+            'tile_free_drawing' => ['nullable', 'boolean'],
             'wax_color' => ['nullable', 'string', 'max:255'],
             'wax_color_name' => ['nullable', 'string', 'max:255'],
             'fabric_color' => ['nullable', 'hex_color'],
@@ -393,6 +397,7 @@ class UserDrawingController extends Controller
             'user_id' => $drawing->user_id,
             'title' => $drawing->title,
             'motif' => $drawing->motif,
+            'tile_free_drawing' => $drawing->tile_free_drawing,
             'wax_color' => $drawing->wax_color,
             'wax_color_name' => $drawing->wax_color_name,
             'fabric_color' => $drawing->fabric_color,

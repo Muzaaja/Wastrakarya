@@ -10,7 +10,7 @@ export const BATIK_MOTIFS = [
         name: 'Tanpa Pola',
         origin: '',
         category: 'Polos / Bebas',
-        description: 'Kanvas polos tanpa garis titik-titik panduan. Bebaskan kreativitas dan imajinasi Anda untuk melukis motif batik orisinal secara mandiri dengan pengulangan tanpa batas.',
+        description: 'Kanvas polos tanpa garis titik-titik panduan. Bebaskan kreativitas dan imajinasi Anda untuk melukis motif batik orisinal dengan pilihan gambar bebas atau pengulangan ubin.',
         svgIcon: (
             <svg viewBox="0 0 64 64" className="w-12 h-12 stroke-[#CDB988] fill-none" strokeWidth="1.8">
                 {/* Frame Persegi Putus-putus Melambangkan Kanvas Polos Bebas */}

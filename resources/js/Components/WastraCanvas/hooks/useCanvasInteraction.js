@@ -75,6 +75,7 @@ export default function useCanvasInteraction({
     setZoom,
     showToast,
     startDrawing,
+    tileFreeDrawing,
     user,
     waxColor,
     zoom,
@@ -291,7 +292,10 @@ export default function useCanvasInteraction({
             const distance = Math.hypot(deltaX, deltaY);
             const stepSize = Math.max(1, radius / 3);
             const steps = Math.ceil(distance / stepSize);
-            const isTiled = shouldTileDrawingForMotif(selectedMotif);
+            const isTiled = shouldTileDrawingForMotif(
+                selectedMotif,
+                tileFreeDrawing,
+            );
             const translations = getStrokeTranslations(
                 pointOne,
                 pointTwo,
@@ -347,6 +351,7 @@ export default function useCanvasInteraction({
             removePencilForStroke,
             scheduleMainCanvasRender,
             selectedMotif,
+            tileFreeDrawing,
             user?.id,
             user?.name,
         ],

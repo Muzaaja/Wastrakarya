@@ -58,12 +58,21 @@ export default function WastraCanvas({
     const { toastMessage, showToast } = useToast();
 
     const [selectedMotif, setSelectedMotif] = useState(
-        initialDrawing?.motif || "kawung",
+        initialDrawing?.motif || "polos",
+    );
+    const [tileFreeDrawing, setTileFreeDrawing] = useState(
+        Boolean(initialDrawing?.tile_free_drawing),
     );
     const [fabricColor, setFabricColor] = useState(
         initialDrawing?.fabric_color || FABRIC_BASE_COLOR,
     );
-    const [showGuide, setShowGuide] = useState(true);
+    const [showGuide, setShowGuide] = useState(
+        Boolean(
+            initialDrawing?.motif &&
+                initialDrawing.motif !== "polos" &&
+                initialDrawing.motif !== "none",
+        ),
+    );
     const [guideOpacity] = useState(0.75);
     const [showTileGrid, setShowTileGrid] = useState(false);
 
@@ -72,6 +81,7 @@ export default function WastraCanvas({
 
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const [isToolPanelOpen, setIsToolPanelOpen] = useState(true);
     const [detailMotifModal, setDetailMotifModal] = useState(null);
     const [projectTitle, setProjectTitle] = useState(
         initialDrawing?.title || "Karya tanpa judul",
@@ -176,6 +186,7 @@ export default function WastraCanvas({
         setZoom,
         showToast,
         startDrawing: malam.startDrawing,
+        tileFreeDrawing,
         user,
         waxColor,
         zoom,
@@ -207,6 +218,12 @@ export default function WastraCanvas({
         user,
         waxColor,
     });
+
+    useEffect(() => {
+        if (tutorial.showTutorial) {
+            setIsToolPanelOpen(true);
+        }
+    }, [tutorial.showTutorial]);
 
     const applyMotifSelection = useCallback(
         (motifId, { broadcastChange = false, markUnsaved = false } = {}) => {
@@ -483,6 +500,7 @@ export default function WastraCanvas({
             const payload = {
                 title,
                 motif: selectedMotif,
+                tile_free_drawing: tileFreeDrawing,
                 wax_color: waxColor,
                 wax_color_name: waxColorName,
                 fabric_color: fabricColor,
@@ -578,6 +596,7 @@ export default function WastraCanvas({
                     userId: null,
                     title,
                     motif: selectedMotif,
+                    tileFreeDrawing,
                     waxColor,
                     waxColorName,
                     fabricColor,
@@ -600,6 +619,7 @@ export default function WastraCanvas({
                         userId: null,
                         title,
                         motif: selectedMotif,
+                        tileFreeDrawing,
                         waxColor,
                         waxColorName,
                         fabricColor,
@@ -638,6 +658,7 @@ export default function WastraCanvas({
                             userId: user?.id ?? null,
                             title,
                             motif: selectedMotif,
+                            tileFreeDrawing,
                             fabricColor,
                             fabric_color: fabricColor,
                             dataUrl: artworkDataUrl,
@@ -732,6 +753,8 @@ export default function WastraCanvas({
                     return {
                         title: snapshot.title,
                         motif: snapshot.motif,
+                        tile_free_drawing:
+                            normalizedSnapshot.tileFreeDrawing,
                         fabric_color: normalizedSnapshot.fabricColor,
                         data_url: normalizedSnapshot.dataUrl,
                         pencil_data_url: normalizedSnapshot.pencilDataUrl,
@@ -790,13 +813,6 @@ export default function WastraCanvas({
 
             const hasLoadableArtwork = hasStoredArtwork(fullDrawing);
 
-            if (!hasLoadableArtwork) {
-                showToast(
-                    "Karya ini belum memiliki gambar tersimpan. Kanvas saat ini tidak diubah.",
-                );
-                return;
-            }
-
             saveStateToHistory();
             try {
                 await loadArtworkLayers({
@@ -817,6 +833,12 @@ export default function WastraCanvas({
             if (fullDrawing.motif) {
                 applyMotifSelection(fullDrawing.motif);
             }
+            setTileFreeDrawing(
+                Boolean(
+                    fullDrawing.tile_free_drawing ??
+                        fullDrawing.tileFreeDrawing,
+                ),
+            );
             if (fullDrawing.wax_color) {
                 setWaxColor(fullDrawing.wax_color);
             }
@@ -850,11 +872,11 @@ export default function WastraCanvas({
                 setShareModalOpen(false);
             }
 
-            showToast(
-                restoredFromSnapshot
-                    ? `Karya "${fullDrawing.title}" dipulihkan. Simpan kembali untuk memperbarui database.`
-                    : `Karya "${fullDrawing.title}" dimuat`,
-            );
+            // showToast(
+            //     restoredFromSnapshot
+            //         ? `Karya "${fullDrawing.title}" dipulihkan. Simpan kembali untuk memperbarui database.`
+            //         : `Karya "${fullDrawing.title}" dimuat`,
+            // );
         },
         [
             applyMotifSelection,
@@ -934,10 +956,10 @@ export default function WastraCanvas({
                     setProjectTitle(data.title);
                 }
                 if (data.motif) {
-                    setSelectedMotif(data.motif);
+                    applyMotifSelection(data.motif);
                 }
-                if (data.showGuide !== undefined) {
-                    setShowGuide(data.showGuide);
+                if (data.tileFreeDrawing !== undefined) {
+                    setTileFreeDrawing(Boolean(data.tileFreeDrawing));
                 }
                 if (data.activeTool !== undefined) {
                     setActiveTool(data.activeTool);
@@ -978,7 +1000,10 @@ export default function WastraCanvas({
                     setProjectTitle(data.title);
                 }
                 if (data.motif) {
-                    setSelectedMotif(data.motif);
+                    applyMotifSelection(data.motif);
+                }
+                if (data.tileFreeDrawing !== undefined) {
+                    setTileFreeDrawing(Boolean(data.tileFreeDrawing));
                 }
                 if (data.waxColor) {
                     setWaxColor(data.waxColor);
@@ -1078,9 +1103,12 @@ export default function WastraCanvas({
         renderMainCanvasRef,
         selectedMotif,
         setFabricColor,
+        setHasUnsavedChanges,
         setProjectTitle,
         setShareType,
+        setTileFreeDrawing,
         showToast,
+        tileFreeDrawing,
         user,
         waxColor,
     });
@@ -1119,6 +1147,14 @@ export default function WastraCanvas({
             markUnsaved: true,
         });
 
+        if (
+            motif.id !== "polos" &&
+            tutorial.showTutorial &&
+            tutorial.tutorialStep === 1
+        ) {
+            tutorial.setTutorialStep(2);
+        }
+
         if (motif.id === "polos") {
             showToast("Mode Kanvas Polos (Tanpa Panduan) aktif");
         } else {
@@ -1129,6 +1165,28 @@ export default function WastraCanvas({
     const handleUseMotifFromDetails = (motif) => {
         handleSelectMotif(motif);
         setDetailMotifModal(null);
+    };
+
+    const handleTileFreeDrawingChange = (shouldTile) => {
+        setTileFreeDrawing(shouldTile);
+        setHasUnsavedChanges(true);
+
+        if (canvasChannelRef.current && loadedDrawingId) {
+            try {
+                canvasChannelRef.current.whisper("motif", {
+                    motif: selectedMotif,
+                    tileFreeDrawing: shouldTile,
+                    userId: user?.id,
+                    userName: user?.name,
+                });
+            } catch (_) {}
+        }
+
+        showToast(
+            shouldTile
+                ? "Pengulangan ubin untuk Tanpa Pola diaktifkan"
+                : "Tanpa Pola kembali ke gambar bebas",
+        );
     };
 
     const handleStartTutorial = () => {
@@ -1228,6 +1286,10 @@ export default function WastraCanvas({
                         setShowMoreMenu,
                         showMoreMenu,
                     }}
+                    toolPanel={{
+                        isOpen: isToolPanelOpen,
+                        onOpen: () => setIsToolPanelOpen(true),
+                    }}
                     viewport={{
                         onResetZoom: handleResetZoom,
                         onZoomIn: handleZoomIn,
@@ -1237,20 +1299,25 @@ export default function WastraCanvas({
                     }}
                 />
                 <MotifLibraryPanel
+                    forceExpanded={tutorial.showTutorial}
                     motifs={BATIK_MOTIFS}
                     onOpenMotifDetails={setDetailMotifModal}
                     onSelectMotif={handleSelectMotif}
+                    onTileFreeDrawingChange={handleTileFreeDrawingChange}
                     selectedMotif={selectedMotif}
                     setShowTileGrid={setShowTileGrid}
                     showTileGrid={showTileGrid}
+                    tileFreeDrawing={tileFreeDrawing}
                     user={user}
                 />
                 <MalamToolPanel
                     activeTool={activeTool}
                     containerRef={toolPanelBoundsRef}
                     forceExpanded={tutorial.showTutorial}
+                    isOpen={isToolPanelOpen}
                     malam={malam}
                     malamWiggle={malamWiggle}
+                    onClose={() => setIsToolPanelOpen(false)}
                     onSelectTool={selectTool}
                 />
             </div>

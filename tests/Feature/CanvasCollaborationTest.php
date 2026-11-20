@@ -14,6 +14,19 @@ class CanvasCollaborationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_authenticated_canvas_defaults_to_tanpa_pola_without_tiling(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/canvas');
+
+        $drawing = UserDrawing::query()->where('user_id', $user->id)->sole();
+
+        $response->assertRedirect(route('canvas.show', $drawing));
+        $this->assertSame('polos', $drawing->motif);
+        $this->assertFalse($drawing->tile_free_drawing);
+    }
+
     public function test_user_can_create_drawing_with_default_private_share_type(): void
     {
         $user = User::factory()->create();
@@ -165,6 +178,31 @@ class CanvasCollaborationTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('WastraCanvas')
                 ->where('initialDrawing.motif', 'parang'));
+    }
+
+    public function test_tanpa_pola_tiling_preference_is_applied_when_drawing_is_loaded_again(): void
+    {
+        $owner = User::factory()->create();
+        $drawing = UserDrawing::factory()->create([
+            'user_id' => $owner->id,
+            'motif' => 'polos',
+            'tile_free_drawing' => false,
+        ]);
+
+        $this->actingAs($owner)
+            ->putJson("/api/user-drawings/{$drawing->id}", [
+                'tile_free_drawing' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('tile_free_drawing', true);
+
+        $this->actingAs($owner)
+            ->get("/canvas/{$drawing->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('WastraCanvas')
+                ->where('initialDrawing.motif', 'polos')
+                ->where('initialDrawing.tile_free_drawing', true));
     }
 
     public function test_saved_fabric_color_is_applied_when_drawing_is_loaded_again(): void

@@ -2,8 +2,10 @@ export const CANVAS_WIDTH = 960;
 export const CANVAS_HEIGHT = 960;
 export const CANVAS_TILE_SIZE = 160;
 
-export const shouldTileDrawingForMotif = (motifId) =>
-    Boolean(motifId && motifId !== "polos" && motifId !== "none");
+export const shouldTileDrawingForMotif = (motifId, tileFreeDrawing = false) =>
+    motifId === "polos" || motifId === "none"
+        ? tileFreeDrawing
+        : Boolean(motifId);
 
 export const CANTING_SIZE = 3.5;
 export const PENCIL_SIZE = 1.5;

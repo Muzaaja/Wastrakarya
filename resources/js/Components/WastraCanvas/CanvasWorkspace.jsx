@@ -1,4 +1,4 @@
-import { Droplets } from "lucide-react";
+import { Droplets, Paintbrush } from "lucide-react";
 import CanvasSurface from "./CanvasSurface";
 import CanvasToolbar from "./CanvasToolbar";
 
@@ -10,6 +10,7 @@ export default function CanvasWorkspace({
     history,
     malam,
     menu,
+    toolPanel,
     viewport,
 }) {
     return (
@@ -62,20 +63,35 @@ export default function CanvasWorkspace({
                         {canvas.canvasWidth}×{canvas.canvasHeight}
                     </span>
                 </div>
-                <button
-                    id="tour-dyeing"
-                    type="button"
-                    onClick={dyeing.onStart}
-                    className="flex h-7 items-center gap-2 rounded-full border border-[#6FA6B2]/35 bg-[#315B74]/15 px-3 font-semibold text-[#A7D0D6] transition-all hover:border-[#8CC6D3]/70 hover:bg-[#315B74]/30 hover:text-[#DCECEF] active:scale-[0.98]"
-                    title="Mulai proses pencelupan kain (Ngelir)"
-                >
-                    <span
-                        className="h-3 w-3 rounded-full border border-white/20"
-                        style={{ backgroundColor: dyeing.color }}
-                    />
-                    <Droplets size={13} />
-                    <span className="hidden sm:inline">Ngelir</span>
-                </button>
+                <div className="flex items-center gap-2">
+                    {!toolPanel.isOpen && (
+                        <button
+                            type="button"
+                            onClick={toolPanel.onOpen}
+                            className="flex h-7 items-center gap-2 rounded-full border border-[#CDB988]/35 bg-[#CDB988]/10 px-3 font-semibold text-[#D8C7A5] transition-all hover:border-[#CDB988]/70 hover:bg-[#CDB988]/20 hover:text-[#F3E5C8] active:scale-[0.98]"
+                            title="Buka palet alat lukis"
+                            aria-controls="wastra-tool-panel"
+                            aria-expanded={false}
+                        >
+                            <Paintbrush size={13} />
+                            <span className="hidden sm:inline">Alat</span>
+                        </button>
+                    )}
+                    <button
+                        id="tour-dyeing"
+                        type="button"
+                        onClick={dyeing.onStart}
+                        className="flex h-7 items-center gap-2 rounded-full border border-[#6FA6B2]/35 bg-[#315B74]/15 px-3 font-semibold text-[#A7D0D6] transition-all hover:border-[#8CC6D3]/70 hover:bg-[#315B74]/30 hover:text-[#DCECEF] active:scale-[0.98]"
+                        title="Mulai proses pencelupan kain (Ngelir)"
+                    >
+                        <span
+                            className="h-3 w-3 rounded-full border border-white/20"
+                            style={{ backgroundColor: dyeing.color }}
+                        />
+                        <Droplets size={13} />
+                        <span className="hidden sm:inline">Ngelir</span>
+                    </button>
+                </div>
             </div>
         </main>
     );

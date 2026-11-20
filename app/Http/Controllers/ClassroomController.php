@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Classroom;
+use App\Models\UserDrawing;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class ClassroomController extends Controller
 {
-    public function store(Request $request) 
+    public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -39,7 +40,7 @@ class ClassroomController extends Controller
 
         $request->user()->classrooms()->syncWithoutDetaching([$classroom->id]);
 
-        return back()->with('success', 'Berhasil bergabung ke kelas ' . $classroom->name);
+        return back()->with('success', 'Berhasil bergabung ke kelas '.$classroom->name);
     }
 
     public function show(Request $request, string $code)
@@ -51,7 +52,7 @@ class ClassroomController extends Controller
         ])
             ->where('code', $code)
             ->firstOrFail();
-        
+
         $isMember = $classroom->users->contains('id', $request->user()->id);
 
         if (! $isMember) {
@@ -79,8 +80,9 @@ class ClassroomController extends Controller
 
         $drawing = $request->user()->drawings()->create([
             'classroom_id' => $classroom->id,
-            'title' => 'Karya Bersama ' . $classroom->name,
-            'motif' => 'kawung',
+            'title' => 'Karya Bersama '.$classroom->name,
+            'motif' => 'polos',
+            'tile_free_drawing' => false,
             'wax_color' => '#CDB988',
             'wax_color_name' => 'Emas tua',
             'fabric_color' => '#F5EFEB',
@@ -88,7 +90,7 @@ class ClassroomController extends Controller
             'data_url' => '',
             'pencil_data_url' => null,
             'wax_data_url' => null,
-            'share_type' => \App\Models\UserDrawing::SHARE_PUBLIC,
+            'share_type' => UserDrawing::SHARE_PUBLIC,
             'share_token' => Str::random(32),
         ]);
 

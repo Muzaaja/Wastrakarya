@@ -21,3 +21,17 @@ php artisan serve
 php artisan reverb:start
 npm run dev
 ```
+
+## Akun Default
+
+> Jalankan  ```php aritsan migrate:fresh --seed``` dahulu
+
+### Premium
+
+Email: premium@example.com.
+Password: password.
+
+### Non-Premium
+
+Email: nonpremium@example.com.
+Password: password.

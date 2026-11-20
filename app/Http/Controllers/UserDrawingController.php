@@ -148,13 +148,17 @@ class UserDrawingController extends Controller
 
         $drawing->update($validated);
 
-        // Siarkan pembaruan ke kanvas kolaborasi secara realtime
-        broadcast(new CanvasUpdated(
-            drawing: $drawing,
-            userId: $user->id,
-            userName: $user->name,
-            action: 'updated'
-        ))->toOthers();
+        // Siarkan pembaruan ke kanvas kolaborasi secara realtime (abaikan jika server broadcast/reverb offline)
+        try {
+            broadcast(new CanvasUpdated(
+                drawing: $drawing,
+                userId: $user->id,
+                userName: $user->name,
+                action: 'updated'
+            ))->toOthers();
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json($this->formatDrawingResponse($drawing));
     }
@@ -170,8 +174,8 @@ class UserDrawingController extends Controller
         }
 
         $user = Auth::user();
-        if (! $drawing->isOwner($user)) {
-            return response()->json(['message' => 'Hanya pemilik yang dapat menghapus karya ini.'], 403);
+        if (! $drawing->canUserDelete($user)) {
+            return response()->json(['message' => 'Hanya pemilik atau admin kelas yang dapat menghapus karya ini.'], 403);
         }
 
         $drawing->delete();
@@ -213,14 +217,18 @@ class UserDrawingController extends Controller
             ? $this->authorizedCollaboratorIds($drawing)
             : [];
 
-        broadcast(new CanvasUpdated(
-            drawing: $drawing,
-            userId: $user->id,
-            userName: $user->name,
-            action: 'share_type_changed',
-            extra: ['share_type' => $drawing->share_type],
-            authorizedCollaboratorIds: $authorizedCollaboratorIds
-        ))->toOthers();
+        try {
+            broadcast(new CanvasUpdated(
+                drawing: $drawing,
+                userId: $user->id,
+                userName: $user->name,
+                action: 'share_type_changed',
+                extra: ['share_type' => $drawing->share_type],
+                authorizedCollaboratorIds: $authorizedCollaboratorIds
+            ))->toOthers();
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json($this->formatDrawingResponse($drawing));
     }
@@ -303,13 +311,17 @@ class UserDrawingController extends Controller
 
         $drawing->ensureShareToken();
 
-        broadcast(new CanvasUpdated(
-            drawing: $drawing,
-            userId: $user->id,
-            userName: $user->name,
-            action: 'collaborator_added',
-            extra: ['email' => $email]
-        ))->toOthers();
+        try {
+            broadcast(new CanvasUpdated(
+                drawing: $drawing,
+                userId: $user->id,
+                userName: $user->name,
+                action: 'collaborator_added',
+                extra: ['email' => $email]
+            ))->toOthers();
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json([
             'message' => "Kolaborator {$email} berhasil ditambahkan.",
@@ -350,14 +362,18 @@ class UserDrawingController extends Controller
             ? $this->authorizedCollaboratorIds($drawing)
             : [];
 
-        broadcast(new CanvasUpdated(
-            drawing: $drawing,
-            userId: $user->id,
-            userName: $user->name,
-            action: 'collaborator_removed',
-            extra: ['email' => $email],
-            authorizedCollaboratorIds: $authorizedCollaboratorIds
-        ))->toOthers();
+        try {
+            broadcast(new CanvasUpdated(
+                drawing: $drawing,
+                userId: $user->id,
+                userName: $user->name,
+                action: 'collaborator_removed',
+                extra: ['email' => $email],
+                authorizedCollaboratorIds: $authorizedCollaboratorIds
+            ))->toOthers();
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json(['message' => "Kolaborator {$email} berhasil dihapus."]);
     }

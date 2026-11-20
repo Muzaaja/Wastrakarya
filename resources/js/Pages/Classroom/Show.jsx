@@ -1,20 +1,81 @@
 import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowLeft, Users, Trash2, Copy, Check, Plus, Palette } from 'lucide-react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
 import DesignCard from '@/Components/Wastrakarya/DesignCard';
+import ToastNotification from '@/Components/WastraCanvas/ToastNotification';
+import useToast from '@/Components/WastraCanvas/hooks/useToast';
 
 export default function Show({ classroom, isAdmin, members = [], drawings = [] }) {
+    const { auth } = usePage().props;
     const [copied, setCopied] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [confirmDeleteDrawing, setConfirmDeleteDrawing] = useState(null); // { id, title }
     const [isCreatingDrawing, setIsCreatingDrawing] = useState(false);
+    const { toastMessage, toastType, showToast } = useToast();
+
+    function getCsrfToken() {
+        return document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='))?.split('=')[1];
+    }
 
     // Fungsi salin kode kelas ke clipboard
     function handleCopyCode() {
         navigator.clipboard.writeText(classroom.code);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    }
+
+    // Fungsi ubah nama desain kelas
+    function handleRenameDrawing(drawingId, newTitle) {
+        fetch(`/api/user-drawings/${drawingId}`, {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Accept': 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken() ?? '') 
+            },
+            body: JSON.stringify({ title: newTitle }),
+        }).then((res) => {
+            if (!res.ok) {
+                showToast('Gagal mengubah nama desain.', 'error');
+                return;
+            }
+            router.reload({ 
+                only: ['drawings'],
+                onSuccess: () => {
+                    showToast('Nama desain berhasil diperbarui!', 'info');
+                }
+            });
+        }).catch(() => {
+            showToast('Terjadi kesalahan koneksi.', 'error');
+        });
+    }
+
+    // Fungsi hapus karya kelas
+    function handleDeleteDrawing(drawingId) {
+        fetch(`/api/user-drawings/${drawingId}`, {
+            method: 'DELETE',
+            headers: { 
+                'Accept': 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken() ?? '') 
+            },
+        }).then((res) => {
+            setConfirmDeleteDrawing(null);
+            if (!res.ok) {
+                showToast('Gagal menghapus desain.', 'error');
+                return;
+            }
+            router.reload({ 
+                only: ['drawings'],
+                onSuccess: () => {
+                    showToast('Desain berhasil dihapus.', 'info');
+                }
+            });
+        }).catch(() => {
+            setConfirmDeleteDrawing(null);
+            showToast('Terjadi kesalahan koneksi.', 'error');
+        });
     }
 
     // Fungsi hapus kelas (Khusus Admin)
@@ -36,6 +97,7 @@ export default function Show({ classroom, isAdmin, members = [], drawings = [] }
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-white">
+            <ToastNotification message={toastMessage} type={toastType} />
             <Head title={`Kelas ${classroom.name}`} />
             <Navbar />
 
@@ -122,15 +184,22 @@ export default function Show({ classroom, isAdmin, members = [], drawings = [] }
 
                         {drawings.length > 0 ? (
                             <div className="grid gap-4 w-full grid-cols-3 max-xl:grid-cols-2 max-sm:grid-cols-1">
-                                {drawings.map((drawing) => (
-                                    <DesignCard
-                                        key={drawing.id}
-                                        title={drawing.title || drawing.motif || 'Desain Kelas'}
-                                        lastEdited={drawing.updated_at ? `Diedit ${new Date(drawing.updated_at).toLocaleString('id-ID')}` : undefined}
-                                        thumbnailUrl={drawing.data_url || null}
-                                        onClick={() => router.visit(`/canvas/${drawing.id}`)}
-                                    />
-                                ))}
+                                {drawings.map((drawing) => {
+                                    const canDelete = isAdmin || (auth?.user?.id && Number(drawing.user_id) === Number(auth.user.id));
+                                    const canRename = isAdmin || (auth?.user?.id && Number(drawing.user_id) === Number(auth.user.id));
+
+                                    return (
+                                        <DesignCard
+                                            key={drawing.id}
+                                            title={drawing.title || drawing.motif || 'Desain Kelas'}
+                                            lastEdited={drawing.updated_at ? `Diedit ${new Date(drawing.updated_at).toLocaleString('id-ID')}` : undefined}
+                                            thumbnailUrl={drawing.data_url || null}
+                                            onClick={() => router.visit(`/canvas/${drawing.id}`)}
+                                            onRename={canRename ? (newTitle) => handleRenameDrawing(drawing.id, newTitle) : undefined}
+                                            onDelete={canDelete ? () => setConfirmDeleteDrawing({ id: drawing.id, title: drawing.title || drawing.motif || 'Desain Kelas' }) : undefined}
+                                        />
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-[#1e1f21] border border-dashed border-white/10 rounded-2xl gap-3">
@@ -147,7 +216,7 @@ export default function Show({ classroom, isAdmin, members = [], drawings = [] }
                     <div className="flex flex-col gap-4 w-full lg:w-[360px] shrink-0">
                         <div className="flex items-center gap-2 text-xl font-semibold text-primary">
                             <Users size={22} />
-                            <h2>Daftar Anggota ({members.length})</h2>
+                            <h2>Daftar Anggota ({members.length}/40)</h2>
                         </div>
 
                         <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto pr-1">
@@ -204,6 +273,40 @@ export default function Show({ classroom, isAdmin, members = [], drawings = [] }
                                 type="button"
                                 onClick={handleDeleteClass}
                                 className="rounded-lg bg-red-600 px-4 py-2 text-md font-semibold text-white hover:bg-red-700 transition-colors"
+                            >
+                                Ya, Hapus
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Konfirmasi Hapus Desain Kelas */}
+            {confirmDeleteDrawing && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                    onClick={() => setConfirmDeleteDrawing(null)}
+                >
+                    <div 
+                        className="w-full max-w-sm rounded-2xl bg-[#1e1f21] p-6 shadow-2xl ring-1 ring-white/10"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="mb-2 text-xl font-semibold text-white">Hapus Desain Kelas?</h3>
+                        <p className="mb-6 text-sm text-gray-400">
+                            Desain <span className="font-medium text-white">"{confirmDeleteDrawing.title}"</span> akan dihapus permanen dari kelas dan tidak bisa dikembalikan.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmDeleteDrawing(null)}
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-300 hover:bg-white/10 transition-colors"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleDeleteDrawing(confirmDeleteDrawing.id)}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
                             >
                                 Ya, Hapus
                             </button>

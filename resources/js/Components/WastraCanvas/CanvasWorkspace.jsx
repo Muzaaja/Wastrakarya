@@ -18,6 +18,9 @@ export default function CanvasWorkspace({
             id="tour-canvas"
             className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#182C24] bg-[#08140F] p-3 shadow-xl"
             onPointerDown={drawing.onContainerPointerDown}
+            onPointerMove={drawing.onContainerPointerMove}
+            onPointerUp={drawing.onContainerPointerUp}
+            onPointerCancel={drawing.onContainerPointerUp}
         >
             <CanvasToolbar
                 canRedo={history.canRedo}
@@ -26,11 +29,13 @@ export default function CanvasWorkspace({
                 onExport={menu.onExport}
                 onRedo={history.onRedo}
                 onResetZoom={viewport.onResetZoom}
+                onTogglePanMode={viewport.onTogglePanMode}
                 onUndo={history.onUndo}
                 onZoomIn={viewport.onZoomIn}
                 onZoomOut={viewport.onZoomOut}
                 setShowMoreMenu={menu.setShowMoreMenu}
                 showMoreMenu={menu.showMoreMenu}
+                isPanMode={viewport.isPanMode}
                 zoom={viewport.zoom}
             />
 
@@ -43,6 +48,8 @@ export default function CanvasWorkspace({
                 cursorPos={drawing.cursorPos}
                 drawingTimeLeft={malam.drawingTimeLeft}
                 isPressed={drawing.isPressed}
+                isPanning={viewport.isPanning}
+                isPanReady={viewport.isPanMode || viewport.isSpacePressed}
                 malamState={malam.malamState}
                 onPointerDown={drawing.onPointerDown}
                 onPointerMove={drawing.onPointerMove}

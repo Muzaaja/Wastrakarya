@@ -81,13 +81,12 @@ function LocalToolCursor({
 function RemoteCursors({
     canvasHeight,
     canvasWidth,
-    pan,
     remoteCursors,
     zoom,
 }) {
     return Object.entries(remoteCursors).map(([userId, cursor]) => {
-        const x = pan.x + cursor.x * zoom;
-        const y = pan.y + cursor.y * zoom;
+        const x = cursor.x * zoom;
+        const y = cursor.y * zoom;
 
         if (
             x < -40 ||
@@ -188,6 +187,8 @@ export default function CanvasSurface({
     cursorAngle,
     cursorPos,
     drawingTimeLeft,
+    isPanning,
+    isPanReady,
     isPressed,
     malamState,
     onPointerDown,
@@ -214,9 +215,15 @@ export default function CanvasSurface({
         <div
             data-canvas-viewport
             role="region"
-            aria-label="Kanvas batik yang dapat digulir"
+            aria-label="Kanvas batik yang dapat digeser dan diperbesar"
             tabIndex={0}
-            className="relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#CDB988] [scrollbar-color:#2A473A_#08140F] [scrollbar-width:thin]"
+            className={`relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#CDB988] [scrollbar-color:#2A473A_#08140F] [scrollbar-width:thin] ${
+                isPanning
+                    ? "cursor-grabbing"
+                    : isPanReady
+                      ? "cursor-grab"
+                      : ""
+            }`}
             style={{ touchAction: "pan-x pan-y" }}
         >
             <div
@@ -231,6 +238,8 @@ export default function CanvasSurface({
                     style={{
                         height: renderedCanvasHeight,
                         touchAction: "none",
+                        transform: `translate3d(${pan.x}px, ${pan.y}px, 0)`,
+                        willChange: isPanning ? "transform" : "auto",
                         width: renderedCanvasWidth,
                     }}
                 >
@@ -239,9 +248,13 @@ export default function CanvasSurface({
                         width={renderedCanvasWidth}
                         height={renderedCanvasHeight}
                         className={`block ${
-                            activeTool !== "canting" || canShowCanting
-                                ? "cursor-none"
-                                : "cursor-crosshair"
+                            isPanning
+                                ? "cursor-grabbing"
+                                : isPanReady
+                                  ? "cursor-grab"
+                                  : activeTool !== "canting" || canShowCanting
+                                    ? "cursor-none"
+                                    : "cursor-crosshair"
                         } ${isCanvasEntering ? "opacity-0" : "opacity-100"}`}
                         style={{
                             pointerEvents: isCanvasEntering ? "none" : "auto",
@@ -265,18 +278,19 @@ export default function CanvasSurface({
 
                     {!isCanvasEntering && (
                         <>
-                            <LocalToolCursor
-                                activeTool={activeTool}
-                                cursorAngle={cursorAngle}
-                                cursorPos={cursorPos}
-                                isPressed={isPressed}
-                                malamState={malamState}
-                            />
+                            {!isPanReady && !isPanning && (
+                                <LocalToolCursor
+                                    activeTool={activeTool}
+                                    cursorAngle={cursorAngle}
+                                    cursorPos={cursorPos}
+                                    isPressed={isPressed}
+                                    malamState={malamState}
+                                />
+                            )}
 
                             <RemoteCursors
                                 canvasHeight={renderedCanvasHeight}
                                 canvasWidth={renderedCanvasWidth}
-                                pan={pan}
                                 remoteCursors={remoteCursors}
                                 zoom={zoom}
                             />

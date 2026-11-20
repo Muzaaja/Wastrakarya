@@ -147,7 +147,6 @@ export default function WastraCanvas({
     } = useCanvasRenderer({
         fabricColor,
         guideOpacity,
-        pan,
         selectedMotif,
         showGuide,
         showTileGrid,
@@ -200,13 +199,19 @@ export default function WastraCanvas({
         handleCanvasPointerMove,
         handleCanvasPointerUp,
         handleContainerPointerDown,
+        handleContainerPointerMove,
+        handleContainerPointerUp,
         handleResetZoom,
         handleZoomIn,
         handleZoomOut,
+        isPanMode,
+        isPanning,
         isPressed,
+        isSpacePressed,
         malamWiggle,
         selectTool,
         setActiveTool,
+        togglePanMode,
     } = interaction;
 
     const tutorial = useCanvasTutorial({
@@ -1262,6 +1267,8 @@ export default function WastraCanvas({
                         cursorPos,
                         isPressed,
                         onContainerPointerDown: handleContainerPointerDown,
+                        onContainerPointerMove: handleContainerPointerMove,
+                        onContainerPointerUp: handleContainerPointerUp,
                         onPointerDown: handleCanvasPointerDown,
                         onPointerMove: handleCanvasPointerMove,
                         onPointerUp: handleCanvasPointerUp,
@@ -1292,8 +1299,12 @@ export default function WastraCanvas({
                     }}
                     viewport={{
                         onResetZoom: handleResetZoom,
+                        onTogglePanMode: togglePanMode,
                         onZoomIn: handleZoomIn,
                         onZoomOut: handleZoomOut,
+                        isPanMode,
+                        isPanning,
+                        isSpacePressed,
                         pan,
                         zoom,
                     }}

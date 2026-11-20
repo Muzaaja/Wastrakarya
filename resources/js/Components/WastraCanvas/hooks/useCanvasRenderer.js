@@ -14,7 +14,6 @@ import {
 export default function useCanvasRenderer({
     fabricColor,
     guideOpacity,
-    pan,
     selectedMotif,
     showGuide,
     showTileGrid,
@@ -195,7 +194,6 @@ export default function useCanvasRenderer({
         context.clearRect(0, 0, canvas.width, canvas.height);
 
         context.save();
-        context.translate(pan.x, pan.y);
         context.scale(zoom, zoom);
         context.beginPath();
         context.rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -204,7 +202,7 @@ export default function useCanvasRenderer({
         context.drawImage(pencil, 0, 0);
         context.drawImage(wax, 0, 0);
         context.restore();
-    }, [getCanvasBaseLayer, getPencilCanvas, getWaxCanvas, pan, zoom]);
+    }, [getCanvasBaseLayer, getPencilCanvas, getWaxCanvas, zoom]);
 
     const renderMainCanvasRef = useRef(renderMainCanvas);
     useEffect(() => {

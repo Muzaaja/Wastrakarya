@@ -216,7 +216,7 @@ export default function Show({ classroom, isAdmin, members = [], drawings = [] }
                     <div className="flex flex-col gap-4 w-full lg:w-[360px] shrink-0">
                         <div className="flex items-center gap-2 text-xl font-semibold text-primary">
                             <Users size={22} />
-                            <h2>Daftar Anggota ({members.length})</h2>
+                            <h2>Daftar Anggota ({members.length}/40)</h2>
                         </div>
 
                         <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto pr-1">

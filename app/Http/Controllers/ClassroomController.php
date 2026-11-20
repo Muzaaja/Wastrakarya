@@ -37,6 +37,8 @@ class ClassroomController extends Controller
             return back()->withErrors(['code' => 'Kode kelas tidak ditemukan']);
         }
 
+        $isAlreadyMember = $classroom->users()->where('users.id', $request->user()->id)->exists();
+
         $request->user()->classrooms()->syncWithoutDetaching([$classroom->id]);
 
         return back()->with('success', 'Berhasil bergabung ke kelas ' . $classroom->name);

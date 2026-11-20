@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
-#[Fillable(['user_id', 'title', 'motif', 'wax_color', 'wax_color_name', 'fabric_color', 'canting_size', 'data_url', 'pencil_data_url', 'wax_data_url', 'share_type', 'share_token'])]
+#[Fillable(['user_id', 'classroom_id', 'title', 'motif', 'wax_color', 'wax_color_name', 'fabric_color', 'canting_size', 'data_url', 'pencil_data_url', 'wax_data_url', 'share_type', 'share_token'])]
 class UserDrawing extends Model
 {
     /** @use HasFactory<UserDrawingFactory> */
@@ -25,6 +25,14 @@ class UserDrawing extends Model
     protected $casts = [
         'canting_size' => 'float',
     ];
+
+    /**
+     * @return BelongsTo<Classroom, UserDrawing>
+     */
+    public function classroom(): BelongsTo
+    {
+        return $this->belongsTo(Classroom::class);
+    }
 
     /**
      * @return BelongsTo<User, UserDrawing>
@@ -57,6 +65,14 @@ class UserDrawing extends Model
             return true;
         }
 
+        // Jika karya milik kelas, semua anggota kelas memiliki akses
+        if ($this->classroom_id && $user !== null) {
+            $classroom = $this->classroom ?? Classroom::find($this->classroom_id);
+            if ($classroom && $classroom->users()->where('users.id', $user->id)->exists()) {
+                return true;
+            }
+        }
+
         if ($this->share_type === self::SHARE_PUBLIC) {
             return $user !== null;
         }
@@ -70,7 +86,16 @@ class UserDrawing extends Model
 
     public function canUserCollaborate(?User $user): bool
     {
-        if (! $user || ! $user->hasActiveSubscription()) {
+        if (! $user) {
+            return false;
+        }
+
+        // Anggota kelas otomatis boleh berkolaborasi pada karya kelas tanpa langganan
+        if ($this->classroom_id) {
+            return $this->canUserAccess($user);
+        }
+
+        if (! $user->hasActiveSubscription()) {
             return false;
         }
 

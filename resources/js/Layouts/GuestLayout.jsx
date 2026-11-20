@@ -2,7 +2,7 @@ import { Link } from '@inertiajs/react';
 
 export default function GuestLayout({ children }) {
     return (
-        <div className="relative flex min-h-screen flex-col gap-10 items-center bg-background pt-6 justify-center sm:pt-0 overflow-x-hidden overflow-y-hidden">
+        <div className="relative flex max-md:flex-col gap-20 items-center bg-background justify-center overflow-x-hidden min-h-screen py-[100px] overflow-y-hidden">
             <img src="megamendung.svg" alt="" className='size-[1000px] absolute -top-[200px] -left-[400px] z-0'/>
             <img src="megamendung.svg" alt="" className='size-[1000px] absolute -bottom-[200px] -right-[500px] z-0'/>
             <div className='z-10'>

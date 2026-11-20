@@ -175,7 +175,7 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                             <Shirt3DViewer />
                         </div>
 
-                        <div className='flex flex-1 flex-col gap-4 pr-[100px] max-md:pr-0 items-end max-md:items-center max-md:justify-center'>
+                        <div className='flex flex-1 flex-col gap-4 pr-[30px] max-md:pr-0 items-end max-md:items-center max-md:justify-center'>
                             <h2 className='font-heading font-bold text-8xl max-md:text-6xl text-end max-md:text-center text-primary'>
                                 Simulasi Mahakarya <br /> <i>(3D Mockup)</i>
                             </h2>

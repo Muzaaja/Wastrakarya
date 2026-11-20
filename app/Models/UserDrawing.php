@@ -60,6 +60,27 @@ class UserDrawing extends Model
         return (int) $this->user_id === (int) $user->id;
     }
 
+    public function canUserDelete(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->isOwner($user)) {
+            return true;
+        }
+
+        // Jika karya berada di dalam kelas, admin (pembuat) kelas juga berhak menghapus
+        if ($this->classroom_id) {
+            $classroom = $this->classroom ?? Classroom::find($this->classroom_id);
+            if ($classroom && (int) $classroom->user_id === (int) $user->id) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function canUserAccess(?User $user): bool
     {
         if ($this->isOwner($user)) {

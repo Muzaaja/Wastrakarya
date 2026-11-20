@@ -64,13 +64,12 @@ export default function HeatingOverlay({ malam, tutorial }) {
         >
             <div
                 ref={malam.heatingBackdropRef}
-                className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_10%,rgba(177,80,35,0.24),transparent_34%),radial-gradient(circle_at_16%_82%,rgba(38,98,72,0.18),transparent_38%),linear-gradient(135deg,rgba(1,6,4,0.97),rgba(3,13,9,0.95)_48%,rgba(10,9,5,0.97))] backdrop-blur-sm"
+                className="pointer-events-none fixed inset-0 bg-[rgba(0,0,0,0.90)]"
             />
-            <div className="pointer-events-none fixed left-1/2 top-[-18rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-[#D06D32]/10 blur-[110px]" />
             <div
                 ref={malam.heatingDialogRef}
                 id="tour-malam-card"
-                className="relative z-10 my-auto w-full max-w-3xl transform-gpu overflow-hidden rounded-[2rem] border border-[#D7BE84]/30 bg-[linear-gradient(145deg,rgba(13,32,24,0.98)_0%,rgba(5,16,12,0.99)_56%,rgba(17,20,13,0.98)_100%)] shadow-[0_40px_140px_rgba(0,0,0,0.82),0_0_100px_rgba(211,105,43,0.12),inset_0_1px_0_rgba(255,255,255,0.07)] ring-1 ring-inset ring-white/[0.03]"
+                className="relative z-10 my-auto w-full max-w-3xl transform-gpu overflow-hidden rounded-[2rem] border border-[#D7BE84]/30 bg-[linear-gradient(145deg,rgba(13,32,24,0.98)_0%,rgba(5,16,12,0.99)_56%,rgba(17,20,13,0.98)_100%)] shadow-[0_10px_30px_rgba(0,0,0,0.82),inset_0_1px_0_rgba(255,255,255,0.07)] ring-1 ring-inset ring-white/[0.03]"
             >
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(ellipse_at_top,rgba(211,105,43,0.2),transparent_68%)]" />
                 <div className="pointer-events-none absolute -right-20 top-20 h-52 w-52 rounded-full bg-[#D2A45D]/[0.06] blur-3xl" />

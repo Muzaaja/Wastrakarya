@@ -112,7 +112,7 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                     <img src="megamendung.svg" alt="" className='size-[1000px] absolute -top-[200px] -left-[900px] z-0'/>
                     <img src="megamendung.svg" alt="" className='size-[1000px] absolute -bottom-[200px] -right-[850px] z-0'/>
 
-                    <h1 className='text-primary text-8xl max-lg:text-6xl max-md:text-[56px] leading-[100px] font-heading font-bold justify-center text-center'>
+                    <h1 className='text-primary text-8xl max-lg:text-6xl max-md:text-[56px] leading-[100px] font-heading font-bold justify-center text-center z-10'>
                         Platform Pembelajaran Batik Digital Interaktif
                     </h1>
                     <p className='text-white/85 text-2xl max-lg:text-xl max-md:text-[15px] text-center'>
@@ -175,7 +175,7 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                             <Shirt3DViewer />
                         </div>
 
-                        <div className='flex flex-1 flex-col gap-4 pr-[100px] max-md:pr-0 items-end max-md:items-center max-md:justify-center'>
+                        <div className='flex flex-1 flex-col gap-4 pr-[30px] max-md:pr-0 items-end max-md:items-center max-md:justify-center'>
                             <h2 className='font-heading font-bold text-8xl max-md:text-6xl text-end max-md:text-center text-primary'>
                                 Simulasi Mahakarya <br /> <i>(3D Mockup)</i>
                             </h2>

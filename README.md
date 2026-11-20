@@ -36,6 +36,12 @@ Admin akan diarahkan ke `/admin/dashboard` setelah masuk. Dari halaman tersebut,
 admin dapat mencari pelanggan serta mengaktifkan, menonaktifkan, dan mengatur
 tanggal berakhir langganan.
 
+### Admin
+
+Email: `admin@example.com`
+
+Password: `password`
+
 ### Premium
 
 Email: `premium@example.com`

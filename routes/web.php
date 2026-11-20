@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\CustomerSubscriptionController;
 use App\Http\Controllers\CanvasController;
-use App\Http\Controllers\MockupController;
 use App\Http\Controllers\ClassroomController;
+use App\Http\Controllers\MockupController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserDrawingController;
 use Illuminate\Foundation\Application;
@@ -28,6 +30,15 @@ Route::get('/', function (Request $request) {
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::middleware(['auth', 'verified', 'admin'])
+    ->prefix('admin')
+    ->name('admin.')
+    ->group(function () {
+        Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
+        Route::patch('/customers/{customer}/subscription', [CustomerSubscriptionController::class, 'update'])
+            ->name('customers.subscription.update');
+    });
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

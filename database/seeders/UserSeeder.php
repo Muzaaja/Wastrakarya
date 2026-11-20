@@ -7,6 +7,8 @@ use Illuminate\Database\Seeder;
 
 class UserSeeder extends Seeder
 {
+    public const ADMIN_EMAIL = 'admin@example.com';
+
     public const NON_PREMIUM_EMAIL = 'nonpremium@example.com';
 
     public const PREMIUM_EMAIL = 'premium@example.com';
@@ -19,11 +21,24 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         User::query()->updateOrCreate(
+            ['email' => self::ADMIN_EMAIL],
+            [
+                'name' => 'WastraKarya Admin',
+                'email_verified_at' => now(),
+                'password' => self::DEFAULT_PASSWORD,
+                'is_admin' => true,
+                'is_subscribed' => false,
+                'subscription_expires_at' => null,
+            ],
+        );
+
+        User::query()->updateOrCreate(
             ['email' => self::NON_PREMIUM_EMAIL],
             [
                 'name' => 'Non-Premium User',
                 'email_verified_at' => now(),
                 'password' => self::DEFAULT_PASSWORD,
+                'is_admin' => false,
                 'is_subscribed' => false,
                 'subscription_expires_at' => null,
             ],
@@ -35,6 +50,7 @@ class UserSeeder extends Seeder
                 'name' => 'Premium User',
                 'email_verified_at' => now(),
                 'password' => self::DEFAULT_PASSWORD,
+                'is_admin' => false,
                 'is_subscribed' => true,
                 'subscription_expires_at' => now()->addYear(),
             ],

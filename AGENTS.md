@@ -3,6 +3,17 @@ This repository contains a Laravel application with Inertia.js and React.
 
 Follow all guidelines in CLAUDE.md.
 
+## Admin and subscriptions
+
+- `users.is_admin` is the single role flag. Protect admin endpoints with the
+  `admin` middleware and never expose admin accounts as customers.
+- Customer subscription state lives on `users.is_subscribed` and
+  `users.subscription_expires_at`. Use `User::hasActiveSubscription()` when
+  checking effective access because an enabled subscription may be expired.
+- The admin customer manager is served by the `admin.*` routes and the
+  `Admin/Dashboard` Inertia page. Keep subscription mutations behind those
+  routes and cover authorization plus validation in feature tests.
+
 ===
 
 <laravel-boost-guidelines>

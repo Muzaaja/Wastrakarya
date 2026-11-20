@@ -5,14 +5,14 @@
 1. Install semua library yang dibutuhkan
 ```
 composer install
-npm install
+npm install --legacy-peer-deps
 php artisan install:broadcasting --reverb
 ```
 
 2. Setup
 ```
 php artisan key:generate
-php aritsan migrate:fresh --seed
+php artisan migrate:fresh --seed
 ```
 
 3. Jalankan
@@ -24,14 +24,26 @@ npm run dev
 
 ## Akun Default
 
-> Jalankan  ```php aritsan migrate:fresh --seed``` dahulu
+> Jalankan `php artisan migrate:fresh --seed` dahulu.
+
+### Admin
+
+Email: `admin@example.com`
+
+Password: `password`
+
+Admin akan diarahkan ke `/admin/dashboard` setelah masuk. Dari halaman tersebut,
+admin dapat mencari pelanggan serta mengaktifkan, menonaktifkan, dan mengatur
+tanggal berakhir langganan.
 
 ### Premium
 
-Email: premium@example.com.
-Password: password.
+Email: `premium@example.com`
+
+Password: `password`
 
 ### Non-Premium
 
-Email: nonpremium@example.com.
-Password: password.
+Email: `nonpremium@example.com`
+
+Password: `password`

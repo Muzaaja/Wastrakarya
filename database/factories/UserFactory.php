@@ -50,4 +50,11 @@ class UserFactory extends Factory
             'subscription_expires_at' => now()->addMonth(),
         ]);
     }
+
+    public function admin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_admin' => true,
+        ]);
+    }
 }

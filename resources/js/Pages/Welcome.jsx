@@ -112,7 +112,7 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                     <img src="megamendung.svg" alt="" className='size-[1000px] absolute -top-[200px] -left-[900px] z-0'/>
                     <img src="megamendung.svg" alt="" className='size-[1000px] absolute -bottom-[200px] -right-[850px] z-0'/>
 
-                    <h1 className='text-primary text-8xl max-lg:text-6xl max-md:text-[56px] leading-[100px] font-heading font-bold justify-center text-center'>
+                    <h1 className='text-primary text-8xl max-lg:text-6xl max-md:text-[56px] leading-[100px] font-heading font-bold justify-center text-center z-10'>
                         Platform Pembelajaran Batik Digital Interaktif
                     </h1>
                     <p className='text-white/85 text-2xl max-lg:text-xl max-md:text-[15px] text-center'>

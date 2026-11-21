@@ -26,14 +26,17 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /app
 COPY . .
 
+# Gunakan variabel bawaan Railway + GITHUB_TOKEN
 ARG GITHUB_TOKEN
-ARG REPO_URL
+ARG RAILWAY_GIT_REPO_OWNER
+ARG RAILWAY_GIT_REPO_NAME
+ARG RAILWAY_GIT_BRANCH=main
 
-RUN CLEAN_URL=${REPO_URL#https://} && \
+RUN if [ -z "$GITHUB_TOKEN" ]; then echo "ERROR: GITHUB_TOKEN kosong! Pastikan sudah di-Save & Deploy di tab Variables."; exit 1; fi && \
     git init && \
-    git remote add origin https://${GITHUB_TOKEN}@${CLEAN_URL} && \
-    git fetch origin main --depth=1 && \
-    git reset --hard origin/main && \
+    git remote add origin "https://${GITHUB_TOKEN}@://github.com{RAILWAY_GIT_REPO_OWNER}/${RAILWAY_GIT_REPO_NAME}.git" && \
+    git fetch origin "${RAILWAY_GIT_BRANCH}" --depth=1 && \
+    git reset --hard "origin/${RAILWAY_GIT_BRANCH}" && \
     git lfs pull && \
     rm -rf .git
 

@@ -3,6 +3,8 @@ FROM php:8.4-cli
 # Install dependensi sistem & Node.js 20
 RUN apt-get update && apt-get install -y \
     git \
+    git-lfs \
+    ca-certificates \
     curl \
     libpng-dev \
     libonig-dev \
@@ -13,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && git lfs install
 
 # Install ekstensi PHP untuk Laravel, MySQL, dan Reverb
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
@@ -22,6 +25,16 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 COPY . .
+
+ARG REPO_URL
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    TOKEN=$(cat /run/secrets/GITHUB_TOKEN) && \
+    git init && \
+    git remote add origin https://${TOKEN}@${REPO_URL} && \
+    git fetch origin main --depth=1 && \
+    git reset --hard origin/main && \
+    git lfs pull && \
+    rm -rf .git
 
 ENV COMPOSER_ALLOW_SUPERUSER=1
 RUN composer install --no-dev --optimize-autoloader --no-interaction

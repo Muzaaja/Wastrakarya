@@ -26,11 +26,12 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /app
 COPY . .
 
+ARG GITHUB_TOKEN
 ARG REPO_URL
-RUN --mount=type=secret,id=GITHUB_TOKEN \
-    TOKEN=$(cat /run/secrets/GITHUB_TOKEN) && \
+
+RUN CLEAN_URL=${REPO_URL#https://} && \
     git init && \
-    git remote add origin https://${TOKEN}@${REPO_URL} && \
+    git remote add origin https://${GITHUB_TOKEN}@${CLEAN_URL} && \
     git fetch origin main --depth=1 && \
     git reset --hard origin/main && \
     git lfs pull && \

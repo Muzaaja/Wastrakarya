@@ -33,7 +33,8 @@ class CanvasController extends Controller
         if ($user) {
             $drawing = $user->drawings()->create([
                 'title' => 'Karya tanpa judul',
-                'motif' => 'kawung',
+                'motif' => 'polos',
+                'tile_free_drawing' => false,
                 'wax_color' => '#CDB988',
                 'wax_color_name' => 'Emas tua',
                 'fabric_color' => '#F5EFEB',
@@ -85,6 +86,7 @@ class CanvasController extends Controller
             'user_id' => $item->user_id,
             'title' => $item->title,
             'motif' => $item->motif,
+            'tile_free_drawing' => $item->tile_free_drawing,
             'wax_color' => $item->wax_color,
             'wax_color_name' => $item->wax_color_name,
             'fabric_color' => $item->fabric_color,

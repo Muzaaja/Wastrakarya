@@ -47,9 +47,9 @@ export default function DrawingToolPicker({
                 <span
                     className={`pointer-events-none flex shrink-0 items-center justify-center overflow-hidden transition-transform duration-200 ${
                         vertical
-                            ? "h-10 w-10 rounded-full group-hover:-translate-x-0.5"
+                            ? "h-10 w-10 rounded-none group-hover:-translate-x-0.5"
                             : compact
-                              ? "h-10 w-10 rounded-full group-hover:-translate-y-1"
+                              ? "h-10 w-10 rounded-none group-hover:-translate-y-1"
                               : "h-full w-full group-hover:-translate-y-1"
                     }`}
                 >

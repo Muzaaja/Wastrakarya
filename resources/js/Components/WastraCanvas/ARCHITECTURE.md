@@ -36,7 +36,7 @@ The canvas has three conceptual layers:
 
 This preserves clean exports, zoom-independent stroke widths, inexpensive guide changes, and reliable collaboration snapshots.
 
-When a pakem motif is selected, pencil, canting, and eraser strokes repeat at the shared `160 × 160` motif interval. The repeated stroke wraps across canvas edges, while **Tanpa Pola** keeps free drawing untiled.
+When a pakem motif is selected, pencil, canting, and eraser strokes repeat at the shared `160 × 160` motif interval. The repeated stroke wraps across canvas edges. **Tanpa Pola** defaults to free drawing, but can opt into the same tiled stroke behavior.
 
 ### Model the malam workflow as a state machine
 

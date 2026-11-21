@@ -1,5 +1,6 @@
 import {
     Download,
+    Hand,
     Maximize2,
     Minus,
     MoreHorizontal,
@@ -14,6 +15,7 @@ export default function CanvasToolbar({
     canUndo,
     onClear,
     onExport,
+    onTogglePanMode,
     onRedo,
     onResetZoom,
     onUndo,
@@ -21,6 +23,7 @@ export default function CanvasToolbar({
     onZoomOut,
     setShowMoreMenu,
     showMoreMenu,
+    isPanMode,
     zoom,
 }) {
     return (
@@ -58,6 +61,23 @@ export default function CanvasToolbar({
                     }`}
                 >
                     <Redo2 size={16} />
+                </button>
+
+                <div className="w-px h-4 bg-[#182C24]" />
+
+                <button
+                    type="button"
+                    onClick={onTogglePanMode}
+                    title="Geser kanvas (Space + tarik)"
+                    aria-label="Aktifkan alat geser kanvas"
+                    aria-pressed={isPanMode}
+                    className={`p-1 rounded transition-colors ${
+                        isPanMode
+                            ? "bg-[#CDB988]/20 text-[#E2CEAB]"
+                            : "text-[#9CB0A4] hover:bg-[#162B21] hover:text-[#E2CEAB]"
+                    }`}
+                >
+                    <Hand size={15} />
                 </button>
 
                 <div className="w-px h-4 bg-[#182C24]" />

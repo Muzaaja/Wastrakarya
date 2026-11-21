@@ -20,7 +20,8 @@ class UserDrawingFactory extends Factory
         return [
             'user_id' => User::factory(),
             'title' => fake()->sentence(3),
-            'motif' => 'kawung',
+            'motif' => 'polos',
+            'tile_free_drawing' => false,
             'wax_color' => '#CDB988',
             'wax_color_name' => 'Emas tua',
             'fabric_color' => '#F5EFEB',

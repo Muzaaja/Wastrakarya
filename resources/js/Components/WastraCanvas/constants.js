@@ -2,8 +2,10 @@ export const CANVAS_WIDTH = 960;
 export const CANVAS_HEIGHT = 960;
 export const CANVAS_TILE_SIZE = 160;
 
-export const shouldTileDrawingForMotif = (motifId) =>
-    Boolean(motifId && motifId !== "polos" && motifId !== "none");
+export const shouldTileDrawingForMotif = (motifId, tileFreeDrawing = false) =>
+    motifId === "polos" || motifId === "none"
+        ? tileFreeDrawing
+        : Boolean(motifId);
 
 export const CANTING_SIZE = 3.5;
 export const PENCIL_SIZE = 1.5;
@@ -17,7 +19,7 @@ export const DRAWING_TOOLS = [
         compactImageStyle: {
             width: 18,
             height: 18,
-            transform: "translate(10px, -10px) scale(4) rotate(-55deg)",
+            transform: "translate(15px, -10px) scale(4) rotate(-55deg)",
             filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.35))",
         },
         paletteImageStyle: {
@@ -34,7 +36,7 @@ export const DRAWING_TOOLS = [
         compactImageStyle: {
             width: 18,
             height: 18,
-            transform: "translate(10px, -15px) scale(4) rotate(-70deg)",
+            transform: "translate(12px, -15px) scale(4) rotate(-70deg)",
             filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.35))",
         },
         paletteImageStyle: {
@@ -51,7 +53,7 @@ export const DRAWING_TOOLS = [
         compactImageStyle: {
             width: 18,
             height: 18,
-            transform: "translate(10px, -15px) scale(4) rotate(-90deg)",
+            transform: "translate(16px, -15px) scale(4) rotate(-90deg)",
             filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.35))",
         },
         paletteImageStyle: {

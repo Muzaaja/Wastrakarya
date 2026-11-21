@@ -75,6 +75,7 @@ export default function useCanvasInteraction({
     setZoom,
     showToast,
     startDrawing,
+    tileFreeDrawing,
     user,
     waxColor,
     zoom,
@@ -86,6 +87,8 @@ export default function useCanvasInteraction({
     const [isPressed, setIsPressed] = useState(false);
     const [cursorAngle, setCursorAngle] = useState(0);
     const [isPanning, setIsPanning] = useState(false);
+    const [isPanMode, setIsPanMode] = useState(false);
+    const [isSpacePressed, setIsSpacePressed] = useState(false);
 
     const isDrawingRef = useRef(false);
     const lastPositionRef = useRef(null);
@@ -99,13 +102,40 @@ export default function useCanvasInteraction({
     const panRef = useRef(pan);
     const pendingZoomScrollRef = useRef(null);
     const zoomScrollFrameRef = useRef(null);
+    const isSpacePressedRef = useRef(false);
 
     zoomRef.current = zoom;
     panRef.current = pan;
 
     const selectTool = useCallback((tool) => {
         setActiveTool(tool);
+        setIsPanMode(false);
     }, []);
+
+    const togglePanMode = useCallback(() => {
+        setIsPanMode((currentMode) => !currentMode);
+    }, []);
+
+    const startPanning = useCallback(
+        (event) => {
+            event.preventDefault();
+            isDrawingRef.current = false;
+            lastPositionRef.current = null;
+            setIsPressed(false);
+            setCursorPos(null);
+            setIsPanning(true);
+            panStartRef.current = {
+                mode: "transform",
+                x: event.clientX - panRef.current.x,
+                y: event.clientY - panRef.current.y,
+            };
+
+            try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+            } catch (_) {}
+        },
+        [],
+    );
 
     const getActiveToolConfig = useCallback(() => {
         if (activeTool === "pencil") {
@@ -291,7 +321,10 @@ export default function useCanvasInteraction({
             const distance = Math.hypot(deltaX, deltaY);
             const stepSize = Math.max(1, radius / 3);
             const steps = Math.ceil(distance / stepSize);
-            const isTiled = shouldTileDrawingForMotif(selectedMotif);
+            const isTiled = shouldTileDrawingForMotif(
+                selectedMotif,
+                tileFreeDrawing,
+            );
             const translations = getStrokeTranslations(
                 pointOne,
                 pointTwo,
@@ -347,6 +380,7 @@ export default function useCanvasInteraction({
             removePencilForStroke,
             scheduleMainCanvasRender,
             selectedMotif,
+            tileFreeDrawing,
             user?.id,
             user?.name,
         ],
@@ -364,8 +398,8 @@ export default function useCanvasInteraction({
             const scaleY = canvas.height / rectangle.height;
             const screenX = (event.clientX - rectangle.left) * scaleX;
             const screenY = (event.clientY - rectangle.top) * scaleY;
-            const worldX = (screenX - pan.x) / zoom;
-            const worldY = (screenY - pan.y) / zoom;
+            const worldX = screenX / zoom;
+            const worldY = screenY / zoom;
             const isInside =
                 worldX >= 0 &&
                 worldX <= CANVAS_WIDTH &&
@@ -380,7 +414,7 @@ export default function useCanvasInteraction({
                 screenY,
             };
         },
-        [canvasRef, pan.x, pan.y, zoom],
+        [canvasRef, zoom],
     );
 
     const getCanvasScreenPoint = useCallback(
@@ -433,11 +467,11 @@ export default function useCanvasInteraction({
         setIsPressed(false);
         touchGestureRef.current = {
             distance: Math.max(distance, 1),
-            worldX: (center.x - pan.x) / zoom,
-            worldY: (center.y - pan.y) / zoom,
+            worldX: center.x / zoom,
+            worldY: center.y / zoom,
             zoom,
         };
-    }, [getCanvasScreenPoint, pan.x, pan.y, zoom]);
+    }, [getCanvasScreenPoint, zoom]);
 
     const updateTouchGesture = useCallback(() => {
         const gesture = touchGestureRef.current;
@@ -467,8 +501,14 @@ export default function useCanvasInteraction({
 
         setZoom(nextZoom);
         setPan({
-            x: center.x - gesture.worldX * nextZoom,
-            y: center.y - gesture.worldY * nextZoom,
+            x:
+                panRef.current.x +
+                center.x -
+                gesture.worldX * nextZoom,
+            y:
+                panRef.current.y +
+                center.y -
+                gesture.worldY * nextZoom,
         });
     }, [getCanvasScreenPoint, setPan, setZoom]);
 
@@ -495,39 +535,13 @@ export default function useCanvasInteraction({
                 }
             }
 
-            if (event.button === 1) {
-                const viewport = event.currentTarget.closest(
-                    "[data-canvas-viewport]",
-                );
-                if (!viewport) {
-                    return;
-                }
-
-                event.preventDefault();
-                setIsPanning(true);
-                panStartRef.current = {
-                    mode: "viewport",
-                    clientX: event.clientX,
-                    clientY: event.clientY,
-                    scrollLeft: viewport.scrollLeft,
-                    scrollTop: viewport.scrollTop,
-                    viewport,
-                };
-
-                try {
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                } catch (_) {}
-
-                return;
-            }
-
-            if (event.spaceKey || event.altKey) {
-                setIsPanning(true);
-                panStartRef.current = {
-                    mode: "transform",
-                    x: event.clientX - pan.x,
-                    y: event.clientY - pan.y,
-                };
+            if (
+                event.button === 1 ||
+                isPanMode ||
+                isSpacePressedRef.current ||
+                event.altKey
+            ) {
+                startPanning(event);
                 return;
             }
 
@@ -617,12 +631,12 @@ export default function useCanvasInteraction({
             isOwner,
             malamState,
             onRequireSubscription,
-            pan.x,
-            pan.y,
             saveStateToHistory,
             selectedMotif,
             setStatusMessage,
             showToast,
+            isPanMode,
+            startPanning,
             startTouchGesture,
             startDrawing,
         ],
@@ -646,16 +660,7 @@ export default function useCanvasInteraction({
             }
 
             if (isPanning) {
-                if (panStartRef.current?.mode === "viewport") {
-                    const panStart = panStartRef.current;
-                    panStart.viewport.scrollTo({
-                        left:
-                            panStart.scrollLeft -
-                            (event.clientX - panStart.clientX),
-                        top:
-                            panStart.scrollTop -
-                            (event.clientY - panStart.clientY),
-                    });
+                if (!panStartRef.current) {
                     return;
                 }
 
@@ -812,50 +817,58 @@ export default function useCanvasInteraction({
                 return;
             }
 
-            if (
-                event.target !== canvasRef.current &&
-                event.button === 1
-            ) {
-                const viewport = event.target.closest?.(
-                    "[data-canvas-viewport]",
-                );
-                if (!viewport) {
-                    return;
-                }
-
-                event.preventDefault();
-                setIsPanning(true);
-                panStartRef.current = {
-                    mode: "viewport",
-                    clientX: event.clientX,
-                    clientY: event.clientY,
-                    scrollLeft: viewport.scrollLeft,
-                    scrollTop: viewport.scrollTop,
-                    viewport,
-                };
-
-                try {
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                } catch (_) {}
-
+            const viewport = event.target.closest?.(
+                "[data-canvas-viewport]",
+            );
+            if (!viewport || event.target === canvasRef.current) {
                 return;
             }
 
             if (
-                event.target !== canvasRef.current &&
                 (event.button === 0 ||
-                    event.spaceKey ||
+                    event.button === 1 ||
+                    isPanMode ||
+                    isSpacePressedRef.current ||
                     event.altKey)
             ) {
-                setIsPanning(true);
-                panStartRef.current = {
-                    mode: "transform",
-                    x: event.clientX - pan.x,
-                    y: event.clientY - pan.y,
-                };
+                startPanning(event);
             }
         },
-        [canvasRef, pan.x, pan.y],
+        [canvasRef, isPanMode, startPanning],
+    );
+
+    const handleContainerPointerMove = useCallback(
+        (event) => {
+            if (
+                !isPanning ||
+                event.target === canvasRef.current ||
+                !panStartRef.current
+            ) {
+                return;
+            }
+
+            setPan({
+                x: event.clientX - panStartRef.current.x,
+                y: event.clientY - panStartRef.current.y,
+            });
+        },
+        [canvasRef, isPanning, setPan],
+    );
+
+    const handleContainerPointerUp = useCallback(
+        (event) => {
+            if (!isPanning || event.target === canvasRef.current) {
+                return;
+            }
+
+            setIsPanning(false);
+            panStartRef.current = null;
+
+            try {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            } catch (_) {}
+        },
+        [canvasRef, isPanning],
     );
 
     const handleZoomIn = useCallback(() => {
@@ -1011,11 +1024,22 @@ export default function useCanvasInteraction({
 
     useEffect(() => {
         const handleKeyDown = (event) => {
-            if (event.target.tagName === "INPUT") {
+            const isTyping =
+                event.target instanceof HTMLElement &&
+                (event.target.isContentEditable ||
+                    ["INPUT", "SELECT", "TEXTAREA"].includes(
+                        event.target.tagName,
+                    ));
+
+            if (isTyping) {
                 return;
             }
 
-            if (
+            if (event.code === "Space") {
+                event.preventDefault();
+                isSpacePressedRef.current = true;
+                setIsSpacePressed(true);
+            } else if (
                 (event.ctrlKey || event.metaKey) &&
                 event.key.toLowerCase() === "z"
             ) {
@@ -1043,11 +1067,33 @@ export default function useCanvasInteraction({
             } else if (event.key.toLowerCase() === "e") {
                 event.preventDefault();
                 selectTool("eraser");
+            } else if (event.key === "Escape") {
+                setIsPanMode(false);
             }
         };
 
+        const handleKeyUp = (event) => {
+            if (event.code !== "Space") {
+                return;
+            }
+
+            isSpacePressedRef.current = false;
+            setIsSpacePressed(false);
+        };
+
+        const handleWindowBlur = () => {
+            isSpacePressedRef.current = false;
+            setIsSpacePressed(false);
+        };
+
         window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+        window.addEventListener("blur", handleWindowBlur);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+            window.removeEventListener("blur", handleWindowBlur);
+        };
     }, [
         handleCantingDip,
         handleRedo,
@@ -1066,12 +1112,18 @@ export default function useCanvasInteraction({
         handleCanvasPointerMove,
         handleCanvasPointerUp,
         handleContainerPointerDown,
+        handleContainerPointerMove,
+        handleContainerPointerUp,
         handleResetZoom,
         handleZoomIn,
         handleZoomOut,
+        isPanMode,
+        isPanning,
         isPressed,
+        isSpacePressed,
         malamWiggle,
         selectTool,
         setActiveTool,
+        togglePanMode,
     };
 }

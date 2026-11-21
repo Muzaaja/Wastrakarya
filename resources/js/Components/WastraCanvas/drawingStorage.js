@@ -10,6 +10,8 @@ export const normalizeStoredDrawing = (drawing) => ({
     canvasId: drawing?.canvasId ?? null,
     userId: drawing?.userId ?? null,
     fabricColor: drawing?.fabricColor ?? drawing?.fabric_color ?? null,
+    tileFreeDrawing:
+        drawing?.tileFreeDrawing ?? drawing?.tile_free_drawing ?? false,
     dataUrl: drawing?.dataUrl ?? drawing?.data_url ?? null,
     pencilDataUrl: drawing?.pencilDataUrl ?? drawing?.pencil_data_url ?? null,
     waxDataUrl: drawing?.waxDataUrl ?? drawing?.wax_data_url ?? null,

@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronsRight, GripHorizontal, LocateFixed, X } from "lucide-react";
+import {
+    ChevronsRight,
+    GripHorizontal,
+    LocateFixed,
+    Minimize2,
+    X,
+} from "lucide-react";
 import DrawingToolPicker from "./DrawingToolPicker";
 import MalamStatusCard from "./MalamStatusCard";
 import { isWaxColorEditable } from "./constants";
@@ -10,8 +16,10 @@ export default function MalamToolPanel({
     activeTool,
     containerRef,
     forceExpanded,
+    isOpen,
     malam,
     malamWiggle,
+    onClose,
     onSelectTool,
 }) {
     const panelRef = useRef(null);
@@ -19,6 +27,7 @@ export default function MalamToolPanel({
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [isReturningToDefaultPosition, setIsReturningToDefaultPosition] =
         useState(false);
+    const isPanelOpen = isOpen || forceExpanded;
     const showColorPicker = isWaxColorEditable(malam.malamState);
     const {
         dragHandleProps,
@@ -69,14 +78,23 @@ export default function MalamToolPanel({
 
     return (
         <aside
+            id="wastra-tool-panel"
             ref={panelRef}
+            aria-hidden={!isPanelOpen}
             aria-label="Palet alat lukis bergerak"
-            className={`absolute z-40 flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-white/10 bg-[#09150F]/95 text-[#D8C7A5] ring-1 ring-black/40 backdrop-blur-xl ${
-                isReturningToDefaultPosition && !isDragging
-                    ? "transition-[left,top,width,box-shadow] duration-300 ease-out motion-reduce:transition-none"
-                    : "transition-[width,box-shadow] duration-200"
+            inert={isPanelOpen ? undefined : ""}
+            className={`absolute z-40 flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-white/10 bg-[#09150F]/95 text-[#D8C7A5] ring-1 ring-black/40 backdrop-blur-xl motion-reduce:transition-none ${
+                forceExpanded
+                    ? "transition-none"
+                    : isReturningToDefaultPosition && !isDragging
+                      ? "transition-[left,top,width,transform,opacity,box-shadow] duration-300 ease-out"
+                      : "transition-[width,transform,opacity,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
             } ${
                 isCollapsed ? "w-[19rem]" : "w-[31rem]"
+            } ${
+                isPanelOpen
+                    ? "pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100"
+                    : "pointer-events-none translate-x-12 translate-y-12 scale-90 opacity-0"
             } ${
                 isDragging
                     ? "shadow-[0_30px_80px_rgba(0,0,0,0.68)]"
@@ -107,23 +125,42 @@ export default function MalamToolPanel({
                         type="button"
                         onPointerDown={(event) => event.stopPropagation()}
                         onClick={handleResetPosition}
-                        className="rounded p-1 text-[#71877A] transition-colors hover:bg-white/5 hover:text-[#E2CEAB]"
+                        className="rounded p-1 text-[#71877A] transition-colors hover:bg-white/5 hover:text-[#E2CEAB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CDB988]"
                         title="Kembalikan posisi palet"
+                        aria-label="Kembalikan posisi palet"
                     >
                         <LocateFixed size={13} />
                     </button>
                     <button
                         type="button"
                         onPointerDown={(event) => event.stopPropagation()}
-                        onClick={() => setIsCollapsed((collapsed) => !collapsed)}
-                        className="rounded p-1 text-[#71877A] transition-colors hover:bg-white/5 hover:text-[#E2CEAB]"
-                        title={isCollapsed ? "Buka palet" : "Ringkas palet"}
+                        onClick={() =>
+                            setIsCollapsed((collapsed) => !collapsed)
+                        }
+                        className="rounded p-1 text-[#71877A] transition-colors hover:bg-white/5 hover:text-[#E2CEAB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CDB988]"
+                        title={
+                            isCollapsed ? "Buka palet lengkap" : "Ringkas palet"
+                        }
+                        aria-label={
+                            isCollapsed ? "Buka palet lengkap" : "Ringkas palet"
+                        }
+                        aria-expanded={!isCollapsed}
                     >
                         {isCollapsed ? (
                             <ChevronsRight size={14} />
                         ) : (
-                            <X size={14} />
+                            <Minimize2 size={14} />
                         )}
+                    </button>
+                    <button
+                        type="button"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={onClose}
+                        className="rounded p-1 text-[#71877A] transition-colors hover:bg-[#6B2B2B]/30 hover:text-[#F0B2B2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CDB988]"
+                        title="Tutup palet alat lukis"
+                        aria-label="Tutup palet alat lukis"
+                    >
+                        <X size={14} />
                     </button>
                 </div>
             </div>
@@ -139,7 +176,7 @@ export default function MalamToolPanel({
                     <button
                         type="button"
                         onClick={() => setIsCollapsed(false)}
-                        className="group flex min-w-0 flex-1 items-center justify-end gap-2 rounded-full p-1 text-[#9CB0A4] transition-colors hover:bg-white/5 hover:text-[#E2CEAB]"
+                        className="group flex min-w-0 flex-1 items-center justify-end gap-2 rounded-full p-1 text-[#9CB0A4] transition-colors hover:bg-white/5 hover:text-[#E2CEAB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CDB988]"
                         title="Buka palet lengkap"
                     >
                         <span

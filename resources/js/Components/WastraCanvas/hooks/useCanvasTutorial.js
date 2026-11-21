@@ -58,6 +58,7 @@ export default function useCanvasTutorial({
             setTutorialStep(1);
         } else if (
             tutorialStep === 1 &&
+            selectedMotif !== "polos" &&
             selectedMotif !== tutorialInitRef.current.motif
         ) {
             setTutorialStep(2);

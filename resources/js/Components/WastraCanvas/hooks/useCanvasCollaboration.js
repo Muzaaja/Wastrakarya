@@ -34,9 +34,12 @@ export default function useCanvasCollaboration({
     renderMainCanvasRef,
     selectedMotif,
     setFabricColor,
+    setHasUnsavedChanges,
     setProjectTitle,
     setShareType,
+    setTileFreeDrawing,
     showToast,
+    tileFreeDrawing,
     user,
     waxColor,
 }) {
@@ -52,6 +55,7 @@ export default function useCanvasCollaboration({
         fabricColor,
         waxColor,
         selectedMotif,
+        tileFreeDrawing,
     });
 
     useEffect(() => {
@@ -63,12 +67,14 @@ export default function useCanvasCollaboration({
             fabricColor,
             waxColor,
             selectedMotif,
+            tileFreeDrawing,
         };
     }, [
         cantingSize,
         fabricColor,
         projectTitle,
         selectedMotif,
+        tileFreeDrawing,
         user?.id,
         user?.name,
         waxColor,
@@ -192,6 +198,7 @@ export default function useCanvasCollaboration({
                         ? data.tiled
                         : shouldTileDrawingForMotif(
                               collabStateRef.current.selectedMotif,
+                              collabStateRef.current.tileFreeDrawing,
                           ),
                 );
             })
@@ -288,7 +295,13 @@ export default function useCanvasCollaboration({
                     return;
                 }
 
-                applyMotifSelection(data.motif, { markUnsaved: true });
+                applyMotifSelection(data.motif);
+                if (typeof data.tileFreeDrawing === "boolean") {
+                    setTileFreeDrawing(data.tileFreeDrawing);
+                }
+                if (!data.targetUserId) {
+                    setHasUnsavedChanges(true);
+                }
                 showToast(
                     `${data.userName || "Kolaborator"} mengganti motif menjadi ${data.motif}`,
                 );
@@ -305,6 +318,8 @@ export default function useCanvasCollaboration({
 
                 channel.whisper("motif", {
                     motif: collabStateRef.current.selectedMotif,
+                    tileFreeDrawing:
+                        collabStateRef.current.tileFreeDrawing,
                     userId,
                     userName: collabStateRef.current.userName,
                     targetUserId: data.requesterId,
@@ -470,6 +485,9 @@ export default function useCanvasCollaboration({
                     ) {
                         applyMotifSelection(event.motif);
                     }
+                    if (typeof event.tile_free_drawing === "boolean") {
+                        setTileFreeDrawing(event.tile_free_drawing);
+                    }
                     showToast(
                         `Kanvas diperbarui oleh ${event.user_name || "kolaborator"}`,
                     );
@@ -503,8 +521,10 @@ export default function useCanvasCollaboration({
         loadedDrawingId,
         renderMainCanvasRef,
         setFabricColor,
+        setHasUnsavedChanges,
         setProjectTitle,
         setShareType,
+        setTileFreeDrawing,
         showToast,
         user?.id,
     ]);

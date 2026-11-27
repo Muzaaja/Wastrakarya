@@ -4,6 +4,7 @@ const OPEN_DURATION_MS = 1280;
 const CLOSE_DURATION_MS = 1040;
 const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_PIXEL_RATIO = 1.15;
+const CLOTH_SCALE = 0.92;
 
 const clamp = (value, minimum, maximum) =>
     Math.min(Math.max(value, minimum), maximum);
@@ -67,9 +68,9 @@ const getProjectedTargetRect = (THREE, sceneElement) => {
         new THREE.Euler(0, -0.1, 0),
     );
     clothMatrix.compose(
-        new THREE.Vector3(0, 1.55, 0.12),
+        new THREE.Vector3(0, 1.55 + (3.05 * (1 - CLOTH_SCALE)) / 2, 0.12),
         clothQuaternion,
-        new THREE.Vector3(1, 1, 1),
+        new THREE.Vector3().setScalar(CLOTH_SCALE),
     );
 
     const projectedCorners = [
@@ -108,11 +109,9 @@ const getProjectedTargetRect = (THREE, sceneElement) => {
 
 const vertexShader = `
     varying vec2 vUv;
-    varying vec3 vNormalView;
 
     void main() {
         vUv = uv;
-        vNormalView = normalize(normalMatrix * normal);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
 `;
@@ -120,23 +119,15 @@ const vertexShader = `
 const fragmentShader = `
     uniform sampler2D uArtworkTexture;
     uniform vec3 uFabricColor;
-    uniform float uFoldProgress;
     uniform float uOpacity;
 
     varying vec2 vUv;
-    varying vec3 vNormalView;
 
     void main() {
         vec4 artwork = texture2D(uArtworkTexture, vUv);
         vec3 clothColor = mix(uFabricColor, artwork.rgb, artwork.a);
-        vec3 lightDirection = normalize(vec3(-0.36, 0.58, 1.0));
-        float diffuse = max(dot(normalize(vNormalView), lightDirection), 0.0);
-        float foldLight = mix(1.0, 0.76 + diffuse * 0.34, uFoldProgress);
-        float warp = sin(vUv.x * 860.0) * 0.5 + 0.5;
-        float weft = sin(vUv.y * 860.0) * 0.5 + 0.5;
-        float weave = mix(1.0, 0.975 + (warp + weft) * 0.025, uFoldProgress);
-
-        gl_FragColor = vec4(clothColor * foldLight * weave, uOpacity);
+        gl_FragColor = vec4(clothColor, uOpacity);
+        #include <colorspace_fragment>
     }
 `;
 
@@ -254,7 +245,6 @@ export default function DyeingClothMorph3D({
                 uniforms: {
                     uArtworkTexture: { value: null },
                     uFabricColor: { value: new THREE.Color(fabricColor) },
-                    uFoldProgress: { value: 0 },
                     uOpacity: { value: 1 },
                 },
                 vertexShader,
@@ -438,9 +428,7 @@ export default function DyeingClothMorph3D({
                     );
                 }
                 positions.needsUpdate = true;
-                geometry.computeVertexNormals();
 
-                material.uniforms.uFoldProgress.value = foldProgress;
                 material.uniforms.uOpacity.value =
                     direction === "opening"
                         ? 1 - smoothstep(0.88, 1, rawProgress)

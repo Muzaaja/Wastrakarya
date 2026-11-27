@@ -88,10 +88,11 @@ const clothFragmentShader = `
         float warp = sin(vUv.x * 920.0) * 0.5 + 0.5;
         float weft = sin(vUv.y * 920.0) * 0.5 + 0.5;
         float weave = (warp + weft) * 0.5;
-        float foldShade = mix(0.86, 1.08, vFoldLight);
-        finalColor *= foldShade * mix(0.965, 1.025, weave);
+        float foldShade = mix(0.94, 1.06, vFoldLight);
+        finalColor *= foldShade * mix(0.98, 1.02, weave);
 
         gl_FragColor = vec4(finalColor, 1.0);
+        #include <colorspace_fragment>
     }
 `;
 

@@ -201,7 +201,7 @@ export function createShirt3DObject(material) {
  * Membuat Tekstur Batik Otomatis / Default (Kawung Picis Khas Keraton)
  * Menggunakan canvas 1024x1024 dengan warna hijau zaitun malam sogan & ornamen emas
  */
-export function createDefaultKawungPicisTexture() {
+export function createDefaultKawungPicisPattern() {
     const canvas = document.createElement('canvas');
     canvas.width = 1024;
     canvas.height = 1024;
@@ -269,20 +269,27 @@ export function createDefaultKawungPicisTexture() {
         }
     }
 
-    const texture = new THREE.CanvasTexture(canvas);
+    return canvas;
+}
+
+export function createBatikTexture(pattern) {
+    const texture = new THREE.CanvasTexture(pattern);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(2, 2);
-    texture.needsUpdate = true;
     return texture;
 }
 
+export function createDefaultKawungPicisTexture() {
+    return createBatikTexture(createDefaultKawungPicisPattern());
+}
+
 /**
- * Membuat Tekstur dari Desain Kanvas yang Dilukis Pengguna
+ * Gabungkan motif pengguna dan warna kain dalam kanvas yang bisa diulang.
  * @param {string} tileDataUrl - Data URL dari tile canvas pengguna
  * @param {string|null} fabricColor - Warna kain hasil proses Ngelir
  */
-export function createCustomBatikTexture(tileDataUrl, fabricColor, callback) {
+export function createCustomBatikPattern(tileDataUrl, fabricColor, onLoad) {
     if (!tileDataUrl) return;
 
     const img = new Image();
@@ -303,12 +310,7 @@ export function createCustomBatikTexture(tileDataUrl, fabricColor, callback) {
             ctx.fillRect(0, 0, 1024, 1024);
         }
 
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(2, 2);
-        texture.needsUpdate = true;
-        callback(texture);
+        onLoad(canvas);
     };
     img.src = tileDataUrl;
 }

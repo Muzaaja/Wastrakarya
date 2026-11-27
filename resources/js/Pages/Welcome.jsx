@@ -6,6 +6,7 @@ import Footer from '@/Components/Wastrakarya/Footer';
 import DesignCard from '@/Components/Wastrakarya/DesignCard';
 import ToastNotification from '@/Components/WastraCanvas/ToastNotification';
 import useToast from '@/Components/WastraCanvas/hooks/useToast';
+import { BATIK_MOTIFS } from '@/Components/WastraCanvas/BatikMotifs';
 
 const featureItems = [
     {
@@ -313,22 +314,24 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                                 ref={jendelaScrollRef}
                                 className='flex gap-6 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-4 snap-x snap-mandatory scroll-smooth'
                             >
-                                {jendelaMaknaItems.map((item) => (
+                                {BATIK_MOTIFS.filter((m) => m.id !== 'polos').map((item) => (
                                     <Link
-                                        key={item.title}
-                                        href={item.href}
-                                        className='group relative shrink-0 w-[260px] sm:w-[290px] aspect-square rounded-2xl overflow-hidden border border-white/10 hover:border-primary/50 bg-[#0B1612] snap-start transition-all duration-300'
+                                        key={item.id}
+                                        href='/login'
+                                        className='group relative shrink-0 w-[260px] sm:w-[290px] aspect-square rounded-2xl overflow-hidden border border-white/10 hover:border-primary/50 bg-[#0B1612] snap-start transition-all duration-300 flex flex-col justify-between p-6'
                                     >
-                                        <img
-                                            src={item.image}
-                                            alt={item.title}
-                                            className='w-full h-full object-cover group-hover:scale-105 transition-transform duration-500'
-                                        />
-                                        <div className='absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent' />
-                                        <div className='absolute inset-x-0 bottom-0 p-5 flex items-center justify-between gap-3'>
-                                            <h3 className='font-heading font-bold text-2xl text-primary group-hover:text-white transition-colors'>
-                                                {item.title}
-                                            </h3>
+                                        <div className='flex-1 flex items-center justify-center [&_svg]:w-28 [&_svg]:h-28 group-hover:scale-110 transition-transform duration-500'>
+                                            {item.svgIcon}
+                                        </div>
+                                        <div className='flex items-center justify-between gap-3 pt-4 border-t border-white/5'>
+                                            <div>
+                                                <h3 className='font-heading font-bold text-2xl text-primary group-hover:text-white transition-colors'>
+                                                    {item.name}
+                                                </h3>
+                                                {item.origin && (
+                                                    <p className='text-xs text-white/50 mt-0.5'>{item.origin}</p>
+                                                )}
+                                            </div>
                                             <span className='size-9 rounded-full bg-black/60 backdrop-blur-sm border border-primary/30 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-background transition-colors shrink-0'>
                                                 <Eye className='w-4 h-4' />
                                             </span>

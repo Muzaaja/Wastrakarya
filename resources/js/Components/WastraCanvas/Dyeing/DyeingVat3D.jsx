@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 const MAX_PIXEL_RATIO = 1.2;
-const ACTIVE_FRAME_INTERVAL_MS = 1000 / 40;
-const IDLE_FRAME_INTERVAL_MS = 1000 / 24;
+const ACTIVE_FRAME_INTERVAL_MS = 1000 / 60;
+const IDLE_FRAME_INTERVAL_MS = 1000 / 60;
 const CLOTH_MINIMUM_Y = -0.08;
 const CLOTH_MAXIMUM_Y = 1.72;
 const CLOTH_START_Y = 1.55;
@@ -88,10 +88,11 @@ const clothFragmentShader = `
         float warp = sin(vUv.x * 920.0) * 0.5 + 0.5;
         float weft = sin(vUv.y * 920.0) * 0.5 + 0.5;
         float weave = (warp + weft) * 0.5;
-        float foldShade = mix(0.86, 1.08, vFoldLight);
-        finalColor *= foldShade * mix(0.965, 1.025, weave);
+        float foldShade = mix(0.94, 1.06, vFoldLight);
+        finalColor *= foldShade * mix(0.98, 1.02, weave);
 
         gl_FragColor = vec4(finalColor, 1.0);
+        #include <colorspace_fragment>
     }
 `;
 

@@ -17,7 +17,7 @@ export default {
                 heading: ['Crimson Text', 'serif']
             },
             colors: {
-                'background': '#12251F',
+                'background': '#0D1F1A',
                 'primary': '#EEC74E',
                 'primary-hover': '#D6B346',
             },

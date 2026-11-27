@@ -1,10 +1,5 @@
 import { Link } from "@inertiajs/react"
 
-const socmed = [
-  { src: "/instagram.svg", href: "#" },
-  { src: "/facebook.svg", href: "#" },
-]
-
 export default function Footer() {
   return (
     <footer className="flex flex-col max-md:gap-10 max-lg:px-10 px-20 max-md:py-12 pb-12 w-full bg-primary">
@@ -29,17 +24,7 @@ export default function Footer() {
           </p>
 
           <div className="flex gap-3 justify-end items-end h-full">
-              {socmed.map((item) => (
-                <Link
-                  key={item.src}
-                  href={item.href}
-                  className="font-light text-background hover:font-bold duration-200 transition-all">
-                    <img 
-                      src={item.src}
-                      alt="logo"
-                      className="size-8"/>
-                </Link>
-              ))}
+            <span>wastrakarya@gmail.com</span>
           </div>
         </div>
       </div>

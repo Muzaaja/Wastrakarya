@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 const MAX_PIXEL_RATIO = 1.2;
-const ACTIVE_FRAME_INTERVAL_MS = 1000 / 40;
-const IDLE_FRAME_INTERVAL_MS = 1000 / 24;
+const ACTIVE_FRAME_INTERVAL_MS = 1000 / 60;
+const IDLE_FRAME_INTERVAL_MS = 1000 / 60;
 const CLOTH_MINIMUM_Y = -0.08;
 const CLOTH_MAXIMUM_Y = 1.72;
 const CLOTH_START_Y = 1.55;

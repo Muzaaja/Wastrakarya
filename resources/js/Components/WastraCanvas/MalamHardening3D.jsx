@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 const MAX_PIXEL_RATIO = 1.25;
-const FRAME_INTERVAL_MS = 1000 / 30;
+const FRAME_INTERVAL_MS = 1000 / 60;
 const HOT_WAX_TINT = new THREE.Color("#FFB45F");
 
 const clampProgress = (progress) => THREE.MathUtils.clamp(progress, 0, 1);

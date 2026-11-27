@@ -4,7 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const POT_MODEL_PATH = "/cooking_pot/scene.gltf";
 const MAX_PIXEL_RATIO = 1.35;
-const FRAME_INTERVAL_MS = 1000 / 30;
+const FRAME_INTERVAL_MS = 1000 / 60;
 const POT_WIDTH = 4.2;
 const POT_BOTTOM_Y = -1.12;
 const CUBE_START_POSITION = new THREE.Vector3(-2.45, 0.62, 1.35);

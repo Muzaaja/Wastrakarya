@@ -121,9 +121,6 @@ export default function DesignCard({
             <h4 className="z-10 max-w-[75%] text-[11px] font-bold leading-tight text-white">
               {title}
             </h4>
-            <p className="z-10 mt-1 text-[6px] text-blue-300">
-              Presentasi Kelompok
-            </p>
             {/* Dekorasi lingkaran kanan */}
             <div className="absolute -right-1.5 top-1/2 h-16 w-16 -translate-y-1/2 rounded-full border border-dashed border-sky-300/35 bg-[radial-gradient(circle,rgba(56,189,248,0.45)_0%,transparent_70%)]" />
           </div>

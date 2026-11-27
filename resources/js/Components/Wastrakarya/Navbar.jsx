@@ -25,7 +25,7 @@ export default function Navbar() {
           <>
             <Link
               href="/login"
-              className="flex items-center gap-2 font-sans bg-transparent text-primary border-2 border-primary hover:bg-primary 
+              className="flex items-center gap-2 font-sans bg-transparent text-primary  hover:bg-primary 
               hover:text-background text-md max-md:text-sm px-6 max-md:px-4 py-2.5 rounded-[12px] font-medium transition-all 
               duration-200"
             >

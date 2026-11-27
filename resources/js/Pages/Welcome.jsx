@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { ArrowRight, Plus, ArrowDown, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, Plus, ArrowDown, Eye, ChevronLeft, ChevronRight, Palette, GraduationCap, PenTool } from 'lucide-react';
 import { useState, useRef } from 'react';
 import Navbar from '@/Components/Wastrakarya/Navbar';
 import Footer from '@/Components/Wastrakarya/Footer';
@@ -388,13 +388,52 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
         ) : (
             <>
                 <section className='flex flex-col gap-10 min-h-screen py-[140px] max-md:py-[100px] justify-start px-[85px] max-md:px-6 w-full'>
-                    <div className='flex max-md:flex-col justify-center text-center max-md:gap-10 gap-9 w-full'>
-                        <div className='flex flex-col gap-4'>
-                            <h1 className='text-primary text-7xl text-center max-md:text-[50px] max-md:leading-[60px] leading-[70px] font-heading font-semibold'>
-                                {getGreeting()}, {auth.user.name}!
+                    <div className='relative w-full rounded-2xl overflow-hidden border border-white/10 bg-[#0B1612] flex max-lg:flex-col justify-between items-center p-10 max-md:p-6 gap-8'>
+                        <img
+                            src='/hero.webp'
+                            alt=''
+                            className='absolute inset-y-0 right-0 w-1/2 max-lg:w-full h-full object-cover opacity-35 pointer-events-none'
+                        />
+                        <div className='absolute inset-0 bg-gradient-to-r from-[#0B1612] via-[#0B1612]/90 to-transparent pointer-events-none' />
+
+                        <div className='relative z-10 flex flex-col gap-4 max-w-2xl'>
+                            <h1 className='text-primary text-5xl max-md:text-3xl font-heading font-semibold leading-tight'>
+                                {getGreeting()}, <span className='italic font-normal text-white'>{auth.user.name}!</span>
                             </h1>
-                            <p className='text-white/80 text-[24px] max-md:text-[18px]'>Mau desain apa hari ini?</p>
-                            <div className='flex gap-3 w-full items-center justify-center mt-3'>
+                            <p className='text-white/70 text-base max-md:text-sm leading-relaxed'>
+                                Mau desain apa hari ini? Lanjutkan kanvas kolaboratif atau mulai eksplorasi geometri pakem adiluhung bersama canting digital.
+                            </p>
+                            <div className='flex flex-wrap items-center gap-3 mt-2 text-xs text-white/80'>
+                                <span className='flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10'>
+                                    <span className='size-2 rounded-full bg-primary' />
+                                    Mode Kolaborasi Aktif
+                                </span>
+                                <span className='text-white/30'>•</span>
+                                <span className='flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10'>
+                                    <Palette className='w-3.5 h-3.5 text-primary' />
+                                    {drawings.length} Proyek Berjalan
+                                </span>
+                                <span className='text-white/30'>•</span>
+                                <span className='flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10'>
+                                    <GraduationCap className='w-3.5 h-3.5 text-primary' />
+                                    {classrooms.length} Ruang Kelas
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className='relative z-10 shrink-0 max-lg:w-full flex justify-end'>
+                            <Link
+                                href='/canvas'
+                                className='flex items-center justify-center gap-2.5 bg-primary text-background hover:bg-transparent border-2 border-transparent hover:border-primary hover:text-primary px-6 py-3.5 rounded-[12px] font-semibold text-base transition-all duration-200 max-lg:w-full'
+                            >
+                                <PenTool className='w-4 h-4' />
+                                + Buat Desain Baru
+                            </Link>
+                        </div>
+                    </div>
+
+                    <div className='flex justify-center w-full'>
+                        <div className='flex gap-3 w-full items-center justify-center'>
                                 <button 
                                     type='button'
                                     onClick={() => setActiveTab('personal')}
@@ -412,7 +451,6 @@ export default function Welcome({ drawings = [], classrooms = [] }) {
                                         'hover:bg-primary hover:text-background border-2 border-primary text-primary'} flex gap-2 justify-between px-4 items-center text-lg max-md:text-[16px] max-md:px-3 max-md:py-2 py-2.5 rounded-[12px] font-semibold transition-all duration-200`}>
                                     Ruang Kelas
                                 </button>
-                            </div>
                         </div>
                     </div>
 
